@@ -27,8 +27,8 @@ spring:
   mail:
     host: smtp.yandex.ru
     port: 465
-    username: ${EMAIL_USER:klnkstn@yandex.ru}
-    password: ${EMAIL_PASSWORD:csdqrpuxpmdwvzim}
+    username: ${EMAIL_USER}
+    password: ${EMAIL_PASSWORD}
     protocol: smtps
     default-encoding: UTF-8
     properties:
@@ -37,8 +37,8 @@ spring:
 
 telegram:
   bot:
-    token: ${TELEGRAM_BOT_TOKEN:8496024386:AAHGbjagwhBjcUxZP0k2vsmIYA7LU-GCRik}
-    username: ${TELEGRAM_BOT_USERNAME:SF_VKR_bot}
+    token: ${TELEGRAM_BOT_TOKEN}
+    username: ${TELEGRAM_BOT_USERNAME}
 
 logging:
   level:
