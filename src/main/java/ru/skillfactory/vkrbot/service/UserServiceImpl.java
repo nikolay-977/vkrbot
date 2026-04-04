@@ -41,16 +41,13 @@ public class UserServiceImpl implements UserService {
         user.setRole(userDto.getRole());
         user.setEnabled(true);
 
-        // Генерируем пароль
         String password = UUID.randomUUID().toString().substring(0, 8);
         user.setPassword(passwordEncoder.encode(password));
 
-        // Генерируем токен для студентов и научных руководителей
         if (user.getRole() != Role.ADMIN) {
             user.setToken(tokenService.generateToken());
         }
 
-        // Назначаем научного руководителя для студента
         if (user.getRole() == Role.STUDENT && userDto.getSupervisorId() != null) {
             User supervisor = userRepository.findById(userDto.getSupervisorId())
                     .orElseThrow(() -> new RuntimeException("Научный руководитель не найден"));
@@ -59,7 +56,6 @@ public class UserServiceImpl implements UserService {
 
         User savedUser = userRepository.save(user);
 
-        // Отправляем уведомления через NotificationService
         notificationService.notifyUserCreated(savedUser);
 
         return savedUser;
@@ -77,22 +73,18 @@ public class UserServiceImpl implements UserService {
         user.setTelegram(userDto.getTelegram());
         user.setEnabled(userDto.isEnabled());
 
-        // Проверяем, изменилась ли роль
         if (!user.getRole().equals(userDto.getRole())) {
             String newRole = userDto.getRole().name();
             user.setRole(userDto.getRole());
 
-            // Уведомляем о смене роли
             notificationService.notifyRoleChanged(user, oldRole, newRole);
         }
 
-        // Обновляем научного руководителя для студента
         if (user.getRole() == Role.STUDENT) {
             if (userDto.getSupervisorId() != null) {
                 User supervisor = userRepository.findById(userDto.getSupervisorId())
                         .orElseThrow(() -> new RuntimeException("Научный руководитель не найден"));
 
-                // Если руководитель изменился
                 if (user.getSupervisor() == null || !user.getSupervisor().getId().equals(supervisor.getId())) {
                     user.setSupervisor(supervisor);
                     notificationService.notifySupervisorAssigned(user, supervisor);
@@ -116,7 +108,6 @@ public class UserServiceImpl implements UserService {
         user.setEnabled(false);
         userRepository.save(user);
 
-        // Уведомляем о блокировке
         notificationService.notifyUserBlocked(user);
     }
 
@@ -126,7 +117,6 @@ public class UserServiceImpl implements UserService {
         user.setEnabled(true);
         userRepository.save(user);
 
-        // Уведомляем о разблокировке
         notificationService.notifyUserUnblocked(user);
     }
 
@@ -206,7 +196,6 @@ public class UserServiceImpl implements UserService {
         student.setSupervisor(supervisor);
         userRepository.save(student);
 
-        // Уведомляем через NotificationService
         notificationService.notifySupervisorAssigned(student, supervisor);
     }
 
@@ -235,7 +224,6 @@ public class UserServiceImpl implements UserService {
         user.setToken(tokenService.generateToken());
         userRepository.save(user);
 
-        // Уведомляем о перегенерации токена
         notificationService.notifyTokenRegenerated(user);
     }
 

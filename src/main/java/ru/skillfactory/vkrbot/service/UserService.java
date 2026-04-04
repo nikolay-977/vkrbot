@@ -16,8 +16,8 @@ public interface UserService {
     void unblockUser(Long id);
     User getUserById(Long id);
     User getUserByEmail(String email);
-    User getUserByToken(String token);  // Новый метод
-    List<User> getStudentsBySupervisor(Long supervisorId);  // Новый метод
+    User getUserByToken(String token);
+    List<User> getStudentsBySupervisor(Long supervisorId);
     List<User> getAllUsers();
     Page<User> getAllUsers(Pageable pageable);
     List<User> searchUsers(SearchDto searchDto);

@@ -508,38 +508,31 @@
 </div>
 
 <script>
-    // Функция для переключения видимости токена
     function toggleTokenVisibility(element) {
         const container = element.closest('.token-container');
         const token = container.getAttribute('data-token');
         const maskedSpan = container.querySelector('.token-masked');
 
         if (maskedSpan.textContent === '••••••••••••••••') {
-            // Показываем токен
             maskedSpan.textContent = token;
             maskedSpan.style.fontFamily = 'monospace';
             maskedSpan.style.letterSpacing = '0.5px';
 
-            // Меняем иконку
             const viewBtn = container.querySelector('.view-btn i');
             viewBtn.classList.remove('bi-eye');
             viewBtn.classList.add('bi-eye-slash');
         } else {
-            // Скрываем токен
             maskedSpan.textContent = '••••••••••••••••';
 
-            // Меняем иконку обратно
             const viewBtn = container.querySelector('.view-btn i');
             viewBtn.classList.remove('bi-eye-slash');
             viewBtn.classList.add('bi-eye');
         }
     }
 
-    // Функция для копирования токена
     function copyToken(button) {
         const token = button.getAttribute('data-token');
 
-        // Создаем временный элемент для копирования
         const textarea = document.createElement('textarea');
         textarea.value = token;
         document.body.appendChild(textarea);
@@ -547,16 +540,13 @@
         document.execCommand('copy');
         document.body.removeChild(textarea);
 
-        // Показываем уведомление
         const notification = document.getElementById('copyNotification');
         notification.style.display = 'block';
 
-        // Скрываем уведомление через 2 секунды
         setTimeout(() => {
             notification.style.display = 'none';
         }, 2000);
 
-        // Визуальная обратная связь на кнопке
         const originalHtml = button.innerHTML;
         button.innerHTML = '<i class="bi bi-check"></i>';
         button.style.background = '#28a745';
@@ -571,7 +561,6 @@
         }, 1000);
     }
 
-    // Автоматически скрывать токены при уходе со страницы (опционально)
     window.addEventListener('beforeunload', function() {
         const visibleTokens = document.querySelectorAll('.token-masked:not([style*="display: none"])');
         visibleTokens.forEach(token => {
@@ -581,7 +570,6 @@
         });
     });
 
-    // Скрывать токены через 30 секунд бездействия (опционально)
     let inactivityTimer;
     function resetInactivityTimer() {
         clearTimeout(inactivityTimer);
@@ -590,7 +578,6 @@
             visibleTokens.forEach(token => {
                 if (token.textContent !== '••••••••••••••••') {
                     token.textContent = '••••••••••••••••';
-                    // Меняем иконки обратно на глазики
                     const container = token.closest('.token-container');
                     if (container) {
                         const viewBtn = container.querySelector('.view-btn i');
@@ -601,10 +588,9 @@
                     }
                 }
             });
-        }, 30000); // 30 секунд
+        }, 30000);
     }
 
-    // Сбрасываем таймер при активности
     document.addEventListener('mousemove', resetInactivityTimer);
     document.addEventListener('keypress', resetInactivityTimer);
     resetInactivityTimer();

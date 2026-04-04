@@ -31,37 +31,29 @@ public class MailConfig {
         mailSender.setUsername(username);
         mailSender.setPassword(password);
 
-        // ВАЖНО: Явно устанавливаем протокол
         mailSender.setProtocol("smtps");
 
         Properties props = mailSender.getJavaMailProperties();
 
-        // КРИТИЧЕСКИ ВАЖНО: включаем аутентификацию для smtps
         props.put("mail.smtps.auth", "true");
 
-        // Настройки SSL
         props.put("mail.smtps.ssl.enable", "true");
         props.put("mail.smtps.ssl.trust", host);
 
-        // Дополнительные обязательные настройки для Яндекс.Почты
         props.put("mail.smtps.host", host);
         props.put("mail.smtps.port", String.valueOf(port));
         props.put("mail.smtps.connectiontimeout", "10000");
         props.put("mail.smtps.timeout", "10000");
 
-        // ВАЖНО: Явно указываем, что хотим использовать аутентификацию
         props.put("mail.smtps.auth.mechanisms", "LOGIN PLAIN");
 
-        // Отключаем STARTTLS (мы используем SSL)
         props.put("mail.smtps.starttls.enable", "false");
         props.put("mail.smtps.starttls.required", "false");
 
-        // Debug
         props.put("mail.debug", "true");
 
         mailSender.setJavaMailProperties(props);
 
-        // Принудительно устанавливаем свойства еще раз через setter
         mailSender.setPassword(password);
         mailSender.setUsername(username);
 

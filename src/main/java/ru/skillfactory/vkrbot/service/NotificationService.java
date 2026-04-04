@@ -1,5 +1,6 @@
 package ru.skillfactory.vkrbot.service;
 
+import ru.skillfactory.vkrbot.handler.NotificationHandler;
 import ru.skillfactory.vkrbot.model.Role;
 import ru.skillfactory.vkrbot.model.User;
 import lombok.RequiredArgsConstructor;
@@ -12,21 +13,19 @@ import org.springframework.stereotype.Service;
 public class NotificationService {
 
     private final EmailService emailService;
-    private final TelegramBotService telegramBotService;
+    private final NotificationHandler notificationHandler;
 
     /**
      * Уведомление о создании пользователя
      */
     public void notifyUserCreated(User user) {
-        // Отправляем токен на email для не-админов
         if (user.getRole() != Role.ADMIN) {
             emailService.sendTokenToUser(user);
             log.info("Token sent to email: {}", user.getEmail());
         }
 
-        // Если у пользователя уже есть Telegram chat, отправляем приветствие
         try {
-            telegramBotService.notifyUserCreated(user);
+            notificationHandler.notifyUserCreated(user);
         } catch (Exception e) {
             log.error("Failed to send Telegram notification for user creation: {}", e.getMessage());
         }
@@ -36,7 +35,6 @@ public class NotificationService {
      * Уведомление о назначении научного руководителя
      */
     public void notifySupervisorAssigned(User student, User supervisor) {
-        // Email уведомления
         String studentSubject = "🎓 Назначен научный руководитель";
         String studentText = String.format(
                 "Здравствуйте, %s!\n\n" +
@@ -69,10 +67,9 @@ public class NotificationService {
         );
         emailService.sendNotification(supervisor, supervisorSubject, supervisorText);
 
-        // Telegram уведомления
         try {
-            telegramBotService.notifyStudentAboutSupervisor(student);
-            telegramBotService.notifySupervisorAboutNewStudent(supervisor, student);
+            notificationHandler.notifyStudentAboutSupervisor(student);
+            notificationHandler.notifySupervisorAboutNewStudent(supervisor, student);
         } catch (Exception e) {
             log.error("Failed to send Telegram notifications about supervisor assignment: {}", e.getMessage());
         }
@@ -93,9 +90,8 @@ public class NotificationService {
         );
         emailService.sendNotification(user, subject, text);
 
-        // Telegram уведомление
         try {
-            telegramBotService.notifyUserBlocked(user);
+            notificationHandler.notifyUserBlocked(user);
         } catch (Exception e) {
             log.error("Failed to send Telegram notification about blocking: {}", e.getMessage());
         }
@@ -116,9 +112,8 @@ public class NotificationService {
         );
         emailService.sendNotification(user, subject, text);
 
-        // Telegram уведомление
         try {
-            telegramBotService.notifyUserUnblocked(user);
+            notificationHandler.notifyUserUnblocked(user);
         } catch (Exception e) {
             log.error("Failed to send Telegram notification about unblocking: {}", e.getMessage());
         }
@@ -153,7 +148,7 @@ public class NotificationService {
         }
 
         try {
-            telegramBotService.notifyTokenRegenerated(user);
+            notificationHandler.notifyTokenRegenerated(user);
         } catch (Exception e) {
             log.error("Failed to send Telegram notification about token regeneration: {}", e.getMessage());
         }
