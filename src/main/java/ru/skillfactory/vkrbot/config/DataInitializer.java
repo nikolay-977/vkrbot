@@ -1,5 +1,6 @@
 package ru.skillfactory.vkrbot.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -9,20 +10,15 @@ import ru.skillfactory.vkrbot.model.User;
 import ru.skillfactory.vkrbot.repository.UserRepository;
 
 @Component
+@RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
 
     private final PasswordEncoder passwordEncoder;
 
-    public DataInitializer(UserRepository userRepository, PasswordEncoder passwordEncoder) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-    }
-
     @Override
     public void run(String... args) throws Exception {
-        // Создаем администратора по умолчанию, если его нет
         if (!userRepository.existsByEmail("admin@admin.com")) {
             User admin = new User();
             admin.setFullName("Администратор");

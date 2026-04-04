@@ -21,19 +21,16 @@ public class TelegramService {
 
     @Transactional
     public void connectUserToChat(Long chatId, User user) {
-        // Проверяем, не привязан ли уже этот чат к другому пользователю
         Optional<TelegramChat> existingChat = telegramChatRepository.findByChatId(chatId);
         if (existingChat.isPresent()) {
             TelegramChat chat = existingChat.get();
             if (!chat.getUser().equals(user)) {
-                // Отвязываем от старого пользователя и привязываем к новому
                 chat.setUser(user);
                 chat.setLastActivity(LocalDateTime.now());
                 telegramChatRepository.save(chat);
                 log.info("Chat {} reconnected to user {}", chatId, user.getEmail());
             }
         } else {
-            // Создаем новую связь
             TelegramChat telegramChat = new TelegramChat();
             telegramChat.setChatId(chatId);
             telegramChat.setUser(user);

@@ -47,8 +47,6 @@ public class EmailService {
 
         } catch (MailException e) {
             log.error("Failed to send email to: {}. Error: {}", user.getEmail(), e.getMessage());
-            // Не бросаем исключение, чтобы не прерывать создание пользователя
-            // Просто логируем ошибку
         }
     }
 
