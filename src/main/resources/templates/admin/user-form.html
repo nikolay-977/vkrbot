@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity6">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:if="${userDto.id == null}">Создание пользователя</title>
+    <title th:if="${userDto.id != null}">Редактирование пользователя</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+        .nav-link {
+            font-weight: 500;
+            margin: 0 5px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .nav-link.active {
+            background-color: rgba(255,255,255,0.2);
+        }
+        .content-wrapper {
+            padding: 30px;
+        }
+        .page-title {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .form-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            background: white;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        .required:after {
+            content: " *";
+            color: #dc3545;
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+            padding: 12px 15px;
+            transition: all 0.2s;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102,126,234,0.25);
+        }
+        .form-control.is-invalid, .form-select.is-invalid {
+            border-color: #dc3545;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-weight: 600;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        .btn-secondary {
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-weight: 600;
+            background-color: #6c757d;
+            border: none;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            transform: translateY(-2px);
+        }
+        .invalid-feedback {
+            font-size: 14px;
+        }
+        .info-alert {
+            border-radius: 10px;
+            background-color: #e3f2fd;
+            border: none;
+            color: #0d47a1;
+            padding: 15px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<!-- Навигация в шапке -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/admin/dashboard">
+            <i class="bi bi-shield-lock"></i> Админка
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/dashboard">
+                        <i class="bi bi-speedometer2"></i> Дашборд
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users">
+                        <i class="bi bi-people"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" th:href="${userDto.id == null} ? '/admin/users/create' : '/admin/users'">
+                        <i class="bi bi-person-plus"></i>
+                        <th:block th:if="${userDto.id == null}">Создание</th:block>
+                        <th:block th:if="${userDto.id != null}">Редактирование</th:block>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users/assign-supervisor">
+                        <i class="bi bi-link"></i> Назначить руководителя
+                    </a>
+                </li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle"></i>
+                        <span sec:authentication="name">admin</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li>
+                            <form method="post" th:action="@{/logout}">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="bi bi-box-arrow-right"></i> Выйти
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Основной контент -->
+<div class="content-wrapper">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="page-title">
+                <i class="bi" th:class="${userDto.id == null} ? 'bi-person-plus' : 'bi-pencil'"></i>
+                <th:block th:if="${userDto.id == null}">Создание нового пользователя</th:block>
+                <th:block th:if="${userDto.id != null}">Редактирование пользователя</th:block>
+            </h1>
+            <a href="/admin/users" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Назад к списку
+            </a>
+        </div>
+
+        <!-- Форма -->
+        <div class="card form-card">
+            <div class="card-body p-4">
+                <form th:action="@{${userDto.id == null} ? '/admin/users/create' : '/admin/users/edit/' + ${userDto.id}}"
+                      method="post" th:object="${userDto}">
+
+                    <input type="hidden" th:field="*{id}">
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label for="fullName" class="form-label required">ФИО</label>
+                            <input type="text" class="form-control" th:field="*{fullName}"
+                                   th:classappend="${#fields.hasErrors('fullName')} ? 'is-invalid'"
+                                   placeholder="Введите полное имя">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('fullName')}"
+                                 th:errors="*{fullName}"></div>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label for="email" class="form-label required">Email</label>
+                            <input type="email" class="form-control" th:field="*{email}"
+                                   th:classappend="${#fields.hasErrors('email')} ? 'is-invalid'"
+                                   placeholder="user@example.com">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('email')}"
+                                 th:errors="*{email}"></div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label for="phone" class="form-label">Телефон</label>
+                            <input type="text" class="form-control" th:field="*{phone}"
+                                   placeholder="+7 (999) 999-99-99">
+                            <small class="text-muted">Необязательное поле</small>
+                        </div>
+
+                        <div class="col-md-6 mb-4">
+                            <label for="telegram" class="form-label">Telegram</label>
+                            <input type="text" class="form-control" th:field="*{telegram}"
+                                   placeholder="@username">
+                            <small class="text-muted">Необязательное поле</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <label for="role" class="form-label required">Роль</label>
+                            <select class="form-select" th:field="*{role}"
+                                    th:classappend="${#fields.hasErrors('role')} ? 'is-invalid'"
+                                    id="roleSelect">
+                                <option value="">Выберите роль</option>
+                                <option th:each="role : ${roles}" th:value="${role}"
+                                        th:text="${role}"></option>
+                            </select>
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('role')}"
+                                 th:errors="*{role}"></div>
+                        </div>
+
+                        <div class="col-md-6 mb-4" id="supervisorField" style="display: none;">
+                            <label for="supervisorId" class="form-label">Научный руководитель</label>
+                            <select class="form-select" th:field="*{supervisorId}">
+                                <option value="">Не выбран</option>
+                                <option th:each="supervisor : ${supervisors}"
+                                        th:value="${supervisor.id}"
+                                        th:text="${supervisor.fullName + ' (' + supervisor.email + ')'}"></option>
+                            </select>
+                            <small class="text-muted">Выберите руководителя для студента</small>
+                        </div>
+
+                        <div class="col-md-6 mb-4" id="diplomaSubject" style="display: none;">
+                            <label for="diplomaSubject" class="form-label">Тема диплома</label>
+                            <input type="text" class="form-control" th:field="*{diplomaSubject}"
+                                   placeholder="Введите тему диплома">
+                            <small class="text-muted">Необязательное поле</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 form-check" th:if="${userDto.id != null}">
+                        <input type="checkbox" class="form-check-input" th:field="*{enabled}" id="enabled">
+                        <label class="form-check-label" for="enabled">
+                            <strong>Активен</strong> (не заблокирован)
+                        </label>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/admin/users" class="btn btn-secondary px-4">
+                            <i class="bi bi-x-circle"></i> Отмена
+                        </a>
+                        <button type="submit" class="btn btn-primary px-5">
+                            <i class="bi bi-check-circle"></i>
+                            <th:block th:if="${userDto.id == null}">Создать</th:block>
+                            <th:block th:if="${userDto.id != null}">Сохранить</th:block>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Подсказка -->
+                <div class="info-alert mt-4">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Примечание:</strong> После создания, студенту и научному руководителю будет автоматически отправлен токен на указанный email.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const roleSelect = document.getElementById('roleSelect');
+        const supervisorField = document.getElementById('supervisorField');
+        const diplomaSubjectField = document.getElementById('diplomaSubject');
+
+        function toggleSupervisorField() {
+            if (roleSelect.value === 'STUDENT') {
+                supervisorField.style.display = 'block';
+                diplomaSubjectField.style.display = 'block';
+            } else {
+                supervisorField.style.display = 'none';
+                diplomaSubjectField.style.display = 'none';
+            }
+        }
+
+        roleSelect.addEventListener('change', toggleSupervisorField);
+        toggleSupervisorField();
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

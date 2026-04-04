@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: admin-app-postgres-dev
+    environment:
+      POSTGRES_DB: admin_db_dev
+      POSTGRES_USER: admin_user_dev
+      POSTGRES_PASSWORD: admin_password_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - admin-network-dev
+
+  adminer:
+    image: adminer:latest
+    container_name: admin-app-adminer-dev
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    networks:
+      - admin-network-dev
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: admin-app-mailhog-dev
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - admin-network-dev
+
+networks:
+  admin-network-dev:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+    name: admin-app-postgres-data-dev

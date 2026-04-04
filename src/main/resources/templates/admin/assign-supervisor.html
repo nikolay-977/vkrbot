@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity6">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Назначение научного руководителя</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+        .nav-link {
+            font-weight: 500;
+            margin: 0 5px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .nav-link.active {
+            background-color: rgba(255,255,255,0.2);
+        }
+        .content-wrapper {
+            padding: 30px;
+        }
+        .page-title {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .assign-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            background: white;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .form-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+        }
+        .form-select {
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+            padding: 12px 15px;
+            transition: all 0.2s;
+        }
+        .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102,126,234,0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-weight: 600;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        .btn-secondary {
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-weight: 600;
+            background-color: #6c757d;
+            border: none;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+            transform: translateY(-2px);
+        }
+        .alert {
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+<!-- Навигация в шапке -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/admin/dashboard">
+            <i class="bi bi-shield-lock"></i> Админка
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/dashboard">
+                        <i class="bi bi-speedometer2"></i> Дашборд
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users">
+                        <i class="bi bi-people"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users/create">
+                        <i class="bi bi-person-plus"></i> Создать
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="/admin/users/assign-supervisor">
+                        <i class="bi bi-link"></i> Назначить руководителя
+                    </a>
+                </li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle"></i>
+                        <span sec:authentication="name">admin</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li>
+                            <form method="post" th:action="@{/logout}">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="bi bi-box-arrow-right"></i> Выйти
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Основной контент -->
+<div class="content-wrapper">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="page-title">
+                <i class="bi bi-link"></i> Назначение научного руководителя
+            </h1>
+            <a href="/admin/dashboard" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> На главную
+            </a>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <!-- Сообщения -->
+                <div th:if="${success != null}" class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle"></i> <span th:text="${success}"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+                <div th:if="${error != null}" class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Карточка назначения -->
+                <div class="card assign-card">
+                    <div class="card-header bg-transparent pt-4">
+                        <ul class="nav nav-tabs card-header-tabs" id="myTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="simple-tab" data-bs-toggle="tab"
+                                        data-bs-target="#simple" type="button" role="tab">
+                                    <i class="bi bi-list-ul"></i> Простое назначение
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="advanced-tab" data-bs-toggle="tab"
+                                        data-bs-target="#advanced" type="button" role="tab">
+                                    <i class="bi bi-grid-3x3-gap-fill"></i> Выбор из списка
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="tab-content" id="myTabContent">
+                            <!-- Простое назначение (выпадающие списки) -->
+                            <div class="tab-pane fade show active" id="simple" role="tabpanel">
+                                <form method="post" th:action="@{/admin/users/assign-supervisor}">
+                                    <div class="mb-4">
+                                        <label for="studentId" class="form-label required">Студент</label>
+                                        <select class="form-select" id="studentId" name="studentId" required>
+                                            <option value="">Выберите студента</option>
+                                            <option th:each="student : ${students}"
+                                                    th:value="${student.id}"
+                                                    th:text="${student.fullName + ' (' + student.email + ')'}"></option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-4">
+                                        <label for="supervisorId" class="form-label required">Научный руководитель</label>
+                                        <select class="form-select" id="supervisorId" name="supervisorId" required>
+                                            <option value="">Выберите руководителя</option>
+                                            <option th:each="supervisor : ${supervisors}"
+                                                    th:value="${supervisor.id}"
+                                                    th:text="${supervisor.fullName + ' (' + supervisor.email + ')'}"></option>
+                                        </select>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary w-100 py-3">
+                                        <i class="bi bi-link"></i> Назначить руководителя
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Расширенное назначение (списки с выбором) -->
+                            <div class="tab-pane fade" id="advanced" role="tabpanel">
+                                <form method="post" th:action="@{/admin/users/assign-supervisor}" id="advancedForm">
+                                    <input type="hidden" name="studentId" id="selectedStudentId">
+                                    <input type="hidden" name="supervisorId" id="selectedSupervisorId">
+
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="mb-3">
+                                                <i class="bi bi-person"></i> Студенты
+                                            </h6>
+                                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 10px; padding: 10px;">
+                                                <div th:each="student : ${students}"
+                                                     class="p-2 mb-2 border rounded"
+                                                     th:data-id="${student.id}"
+                                                     onclick="selectStudent(this)"
+                                                     style="cursor: pointer; transition: all 0.2s;">
+                                                    <strong th:text="${student.fullName}"></strong><br>
+                                                    <small class="text-muted" th:text="${student.email}"></small><br>
+                                                    <small th:if="${student.supervisor != null}" class="text-success">
+                                                        <i class="bi bi-check-circle"></i>
+                                                        <span th:text="${student.supervisor.fullName}"></span>
+                                                    </small>
+                                                    <small th:unless="${student.supervisor != null}" class="text-muted">
+                                                        <i class="bi bi-dash-circle"></i> Без руководителя
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <h6 class="mb-3">
+                                                <i class="bi bi-person-badge"></i> Научные руководители
+                                            </h6>
+                                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 10px; padding: 10px;">
+                                                <div th:each="supervisor : ${supervisors}"
+                                                     class="p-2 mb-2 border rounded"
+                                                     th:data-id="${supervisor.id}"
+                                                     onclick="selectSupervisor(this)"
+                                                     style="cursor: pointer; transition: all 0.2s;">
+                                                    <strong th:text="${supervisor.fullName}"></strong><br>
+                                                    <small class="text-muted" th:text="${supervisor.email}"></small><br>
+                                                    <small class="text-info">
+                                                        <i class="bi bi-people"></i>
+                                                        Студентов: <span th:text="${supervisor.students != null ? #lists.size(supervisor.students) : 0}"></span>
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr class="my-4">
+
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                                <span id="selectedStudentDisplay" class="text-muted">
+                                                    <i class="bi bi-person"></i> Студент не выбран
+                                                </span>
+                                            <br>
+                                            <span id="selectedSupervisorDisplay" class="text-muted">
+                                                    <i class="bi bi-person-badge"></i> Руководитель не выбран
+                                                </span>
+                                        </div>
+                                        <button type="submit" class="btn btn-primary px-4" id="assignBtn" disabled>
+                                            <i class="bi bi-link"></i> Назначить
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Информация -->
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Как это работает:</strong> Выберите студента и научного руководителя, затем нажмите "Назначить". После назначения студент получит уведомление.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedStudent = null;
+    let selectedSupervisor = null;
+
+    function selectStudent(element) {
+        document.querySelectorAll('[onclick="selectStudent(this)"]').forEach(el => {
+            el.style.backgroundColor = '';
+            el.style.borderColor = '#dee2e6';
+        });
+
+        element.style.backgroundColor = '#e3f2fd';
+        element.style.borderColor = '#2196f3';
+        selectedStudent = element.dataset.id;
+
+        document.getElementById('selectedStudentId').value = selectedStudent;
+        document.getElementById('selectedStudentDisplay').innerHTML =
+            '<i class="bi bi-person"></i> Выбран студент: <strong>' +
+            element.querySelector('strong').innerText + '</strong>';
+
+        updateAssignButton();
+    }
+
+    function selectSupervisor(element) {
+        document.querySelectorAll('[onclick="selectSupervisor(this)"]').forEach(el => {
+            el.style.backgroundColor = '';
+            el.style.borderColor = '#dee2e6';
+        });
+
+        element.style.backgroundColor = '#e3f2fd';
+        element.style.borderColor = '#2196f3';
+        selectedSupervisor = element.dataset.id;
+
+        document.getElementById('selectedSupervisorId').value = selectedSupervisor;
+        document.getElementById('selectedSupervisorDisplay').innerHTML =
+            '<i class="bi bi-person-badge"></i> Выбран руководитель: <strong>' +
+            element.querySelector('strong').innerText + '</strong>';
+
+        updateAssignButton();
+    }
+
+    function updateAssignButton() {
+        const assignBtn = document.getElementById('assignBtn');
+        if (selectedStudent && selectedSupervisor) {
+            assignBtn.disabled = false;
+        } else {
+            assignBtn.disabled = true;
+        }
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

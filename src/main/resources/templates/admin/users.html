@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/thymeleaf-extras-springsecurity6">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление пользователями</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+        .nav-link {
+            font-weight: 500;
+            margin: 0 5px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .nav-link:hover {
+            background-color: rgba(255,255,255,0.1);
+        }
+        .nav-link.active {
+            background-color: rgba(255,255,255,0.2);
+        }
+        .content-wrapper {
+            padding: 30px;
+        }
+        .page-title {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .search-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            background: white;
+        }
+        .table-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+            background: white;
+        }
+        .badge {
+            padding: 8px 12px;
+            font-weight: 500;
+            border-radius: 8px;
+        }
+        .action-btn {
+            padding: 5px 10px;
+            margin: 0 2px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            transform: translateY(-2px);
+        }
+        .table th {
+            font-weight: 600;
+            color: #495057;
+        }
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+            padding: 10px 15px;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102,126,234,0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 500;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.4);
+        }
+        .btn-outline-primary {
+            border-color: #667eea;
+            color: #667eea;
+            border-radius: 10px;
+        }
+        .btn-outline-primary:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-color: transparent;
+        }
+        .pagination .page-link {
+            border-radius: 10px;
+            margin: 0 3px;
+            color: #667eea;
+            border: none;
+            padding: 8px 16px;
+        }
+        .pagination .active .page-link {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .token-container {
+            position: relative;
+            display: inline-block;
+        }
+        .token-masked {
+            font-family: monospace;
+            background: #f1f3f5;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid #dee2e6;
+        }
+        .token-masked:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        .token-actions {
+            display: inline-flex;
+            gap: 5px;
+            margin-left: 5px;
+        }
+        .token-btn {
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            background: white;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .token-btn:hover {
+            background: #f8f9fa;
+            border-color: #adb5bd;
+        }
+        .token-btn.copy-btn:hover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            color: #1976d2;
+        }
+        .token-btn.view-btn:hover {
+            background: #fff3e0;
+            border-color: #ff9800;
+            color: #f57c00;
+        }
+        .tooltip {
+            position: fixed;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .tooltip.show {
+            opacity: 1;
+        }
+        .copy-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1050;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .text-muted {
+            color: #6c757d !important;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+<!-- Навигация в шапке -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/admin/dashboard">
+            <i class="bi bi-shield-lock"></i> Админка
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/dashboard">
+                        <i class="bi bi-speedometer2"></i> Дашборд
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link active" href="/admin/users">
+                        <i class="bi bi-people"></i> Пользователи
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users/create">
+                        <i class="bi bi-person-plus"></i> Создать
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/admin/users/assign-supervisor">
+                        <i class="bi bi-link"></i> Назначить руководителя
+                    </a>
+                </li>
+            </ul>
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-person-circle"></i>
+                        <span sec:authentication="name">admin</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li>
+                            <form method="post" th:action="@{/logout}">
+                                <button type="submit" class="dropdown-item">
+                                    <i class="bi bi-box-arrow-right"></i> Выйти
+                                </button>
+                            </form>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Основной контент -->
+<div class="content-wrapper">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="page-title">
+                <i class="bi bi-people"></i> Управление пользователями
+            </h1>
+            <a href="/admin/users/create" class="btn btn-primary">
+                <i class="bi bi-person-plus"></i> Создать пользователя
+            </a>
+        </div>
+
+        <!-- Поиск -->
+        <div class="card search-card">
+            <div class="card-body">
+                <form method="post" th:action="@{/admin/users/search}" th:object="${searchDto}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Поисковый запрос</label>
+                            <input type="text" class="form-control" th:field="*{query}"
+                                   placeholder="Введите текст для поиска...">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Искать в</label>
+                            <select class="form-select" th:field="*{searchBy}">
+                                <option value="all">Везде</option>
+                                <option value="fullName">ФИО</option>
+                                <option value="email">Email</option>
+                                <option value="phone">Телефон</option>
+                                <option value="telegram">Telegram</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Роль</label>
+                            <select class="form-select" th:field="*{role}">
+                                <option value="">Все роли</option>
+                                <option th:each="role : ${T(com.admin.app.model.Role).values()}"
+                                        th:value="${role}" th:text="${role}"></option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Статус</label>
+                            <select class="form-select" th:field="*{enabled}">
+                                <option value="">Все</option>
+                                <option value="true">Активные</option>
+                                <option value="false">Заблокированные</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search"></i> Поиск
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Сообщения -->
+        <div th:if="${success != null}" class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> <span th:text="${success}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <div th:if="${error != null}" class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+
+        <!-- Таблица пользователей -->
+        <div class="card table-card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>ФИО</th>
+                            <th>Тема диплома</th>
+                            <th>Email</th>
+                            <th>Телефон</th>
+                            <th>Telegram</th>
+                            <th>Роль</th>
+                            <th>Статус</th>
+                            <th>Токен</th>
+                            <th>Действия</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="user : ${users}">
+                            <td><span class="badge bg-secondary" th:text="${user.id}">1</span></td>
+                            <td>
+                                <strong th:text="${user.fullName}">Иванов И.И.</strong>
+                                <!-- Показываем руководителя только для студентов -->
+                                <br th:if="${user.role.name() == 'STUDENT'}">
+                                <small class="text-muted" th:if="${user.role.name() == 'STUDENT'}">
+                                    <i class="bi bi-person-badge"></i>
+                                    <span th:if="${user.supervisor != null}" th:text="${user.supervisor.fullName}">Петров П.П.</span>
+                                    <span th:unless="${user.supervisor != null}" class="text-muted">Руководитель не указан</span>
+                                </small>
+                            </td>
+                            <td>
+                                <!-- Показываем тему диплома только для студентов -->
+                                <th:block th:if="${user.role.name() == 'STUDENT'}">
+                                    <small class="text-muted" th:if="${user.role.name() == 'STUDENT'}">
+                                    <i class="bi bi-mortarboard"></i>
+                                    <span th:if="${user.diplomaSubject != null and !user.diplomaSubject.isEmpty()}"
+                                          th:text="${user.diplomaSubject}" class="text-muted">Диалоговая система для взаимодействия</span>
+                                    <span th:unless="${user.diplomaSubject != null and !user.diplomaSubject.isEmpty()}"
+                                          class="text-muted">Тема не указана</span>
+                                    </small>
+                                </th:block>
+                                <!-- Для админов и руководителей ничего не выводим -->
+                                <th:block th:unless="${user.role.name() == 'STUDENT'}">
+                                    <span class="text-muted">—</span>
+                                </th:block>
+                            </td>
+                            <td>
+                                <a th:href="'mailto:' + ${user.email}" class="text-decoration-none" th:text="${user.email}">test@test.com</a>
+                            </td>
+                            <td>
+                                <span th:if="${user.phone != null}" th:text="${user.phone}">+7 (999) 999-99-99</span>
+                                <span th:unless="${user.phone != null}" class="text-muted">—</span>
+                            </td>
+                            <td>
+                                <span th:if="${user.telegram != null}" th:text="${user.telegram}">@telegram</span>
+                                <span th:unless="${user.telegram != null}" class="text-muted">—</span>
+                            </td>
+                            <td>
+                                <span th:class="${user.role.name() == 'ADMIN'} ? 'badge bg-danger' :
+                                               (${user.role.name() == 'SUPERVISOR'} ? 'badge bg-success' : 'badge bg-primary')"
+                                      th:text="${user.role.name()}">
+                                </span>
+                            </td>
+                            <td>
+                                <span th:if="${user.enabled}" class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Активен
+                                </span>
+                                <span th:unless="${user.enabled}" class="badge bg-danger">
+                                    <i class="bi bi-lock"></i> Заблокирован
+                                </span>
+                            </td>
+                            <td>
+                                <div th:if="${user.token != null}" class="token-container" th:data-token="${user.token}">
+                                    <span class="token-masked" onclick="toggleTokenVisibility(this)"
+                                          th:attr="data-original-token=${user.token}">
+                                        ••••••••••••••••
+                                    </span>
+                                    <div class="token-actions">
+                                        <button class="token-btn copy-btn" onclick="copyToken(this)"
+                                                th:attr="data-token=${user.token}" title="Копировать токен">
+                                            <i class="bi bi-files"></i>
+                                        </button>
+                                        <button class="token-btn view-btn" onclick="toggleTokenVisibility(this)"
+                                                th:attr="data-token=${user.token}" title="Показать/скрыть токен">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <span th:unless="${user.token != null}" class="badge bg-secondary">—</span>
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a th:href="@{/admin/users/edit/{id}(id=${user.id})}"
+                                       class="btn btn-sm btn-warning action-btn"
+                                       title="Редактировать">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+
+                                    <form th:if="${user.enabled}" method="post"
+                                          th:action="@{/admin/users/block/{id}(id=${user.id})}"
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Заблокировать пользователя?')">
+                                        <button type="submit" class="btn btn-sm btn-danger action-btn"
+                                                title="Заблокировать">
+                                            <i class="bi bi-lock"></i>
+                                        </button>
+                                    </form>
+
+                                    <form th:unless="${user.enabled}" method="post"
+                                          th:action="@{/admin/users/unblock/{id}(id=${user.id})}"
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Разблокировать пользователя?')">
+                                        <button type="submit" class="btn btn-sm btn-success action-btn"
+                                                title="Разблокировать">
+                                            <i class="bi bi-unlock"></i>
+                                        </button>
+                                    </form>
+
+                                    <form th:if="${user.role.name() != 'ADMIN'}"
+                                          method="post" th:action="@{/admin/users/send-token/{id}(id=${user.id})}"
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Отправить токен на email?')">
+                                        <button type="submit" class="btn btn-sm btn-info action-btn"
+                                                title="Отправить токен">
+                                            <i class="bi bi-envelope"></i>
+                                        </button>
+                                    </form>
+
+                                    <form th:if="${user.role.name() != 'ADMIN'}"
+                                          method="post" th:action="@{/admin/users/regenerate-token/{id}(id=${user.id})}"
+                                          style="display: inline;"
+                                          onsubmit="return confirm('Перегенерировать токен?')">
+                                        <button type="submit" class="btn btn-sm btn-secondary action-btn"
+                                                title="Перегенерировать токен">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr th:if="${users == null or users.empty}">
+                            <td colspan="10" class="text-center py-5">
+                                <i class="bi bi-emoji-frown" style="font-size: 48px; color: #dee2e6;"></i>
+                                <p class="mt-3 text-muted">Пользователи не найдены</p>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Пагинация -->
+                <nav th:if="${!searchPerformed and totalPages != null and totalPages > 1}" class="mt-4">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item" th:classappend="${currentPage == 0} ? 'disabled'">
+                            <a class="page-link" th:href="@{/admin/users(page=${currentPage - 1})}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item" th:each="i : ${#numbers.sequence(0, totalPages - 1)}"
+                            th:classappend="${i == currentPage} ? 'active'">
+                            <a class="page-link" th:href="@{/admin/users(page=${i})}" th:text="${i + 1}"></a>
+                        </li>
+                        <li class="page-item" th:classappend="${currentPage + 1 >= totalPages} ? 'disabled'">
+                            <a class="page-link" th:href="@{/admin/users(page=${currentPage + 1})}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Уведомление о копировании -->
+<div id="copyNotification" class="copy-notification" style="display: none;">
+    <i class="bi bi-check-circle"></i> Токен скопирован в буфер обмена
+</div>
+
+<script>
+    // Функция для переключения видимости токена
+    function toggleTokenVisibility(element) {
+        const container = element.closest('.token-container');
+        const token = container.getAttribute('data-token');
+        const maskedSpan = container.querySelector('.token-masked');
+
+        if (maskedSpan.textContent === '••••••••••••••••') {
+            // Показываем токен
+            maskedSpan.textContent = token;
+            maskedSpan.style.fontFamily = 'monospace';
+            maskedSpan.style.letterSpacing = '0.5px';
+
+            // Меняем иконку
+            const viewBtn = container.querySelector('.view-btn i');
+            viewBtn.classList.remove('bi-eye');
+            viewBtn.classList.add('bi-eye-slash');
+        } else {
+            // Скрываем токен
+            maskedSpan.textContent = '••••••••••••••••';
+
+            // Меняем иконку обратно
+            const viewBtn = container.querySelector('.view-btn i');
+            viewBtn.classList.remove('bi-eye-slash');
+            viewBtn.classList.add('bi-eye');
+        }
+    }
+
+    // Функция для копирования токена
+    function copyToken(button) {
+        const token = button.getAttribute('data-token');
+
+        // Создаем временный элемент для копирования
+        const textarea = document.createElement('textarea');
+        textarea.value = token;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        // Показываем уведомление
+        const notification = document.getElementById('copyNotification');
+        notification.style.display = 'block';
+
+        // Скрываем уведомление через 2 секунды
+        setTimeout(() => {
+            notification.style.display = 'none';
+        }, 2000);
+
+        // Визуальная обратная связь на кнопке
+        const originalHtml = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check"></i>';
+        button.style.background = '#28a745';
+        button.style.color = 'white';
+        button.style.borderColor = '#28a745';
+
+        setTimeout(() => {
+            button.innerHTML = originalHtml;
+            button.style.background = '';
+            button.style.color = '';
+            button.style.borderColor = '';
+        }, 1000);
+    }
+
+    // Автоматически скрывать токены при уходе со страницы (опционально)
+    window.addEventListener('beforeunload', function() {
+        const visibleTokens = document.querySelectorAll('.token-masked:not([style*="display: none"])');
+        visibleTokens.forEach(token => {
+            if (token.textContent !== '••••••••••••••••') {
+                token.textContent = '••••••••••••••••';
+            }
+        });
+    });
+
+    // Скрывать токены через 30 секунд бездействия (опционально)
+    let inactivityTimer;
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+            const visibleTokens = document.querySelectorAll('.token-masked:not([style*="display: none"])');
+            visibleTokens.forEach(token => {
+                if (token.textContent !== '••••••••••••••••') {
+                    token.textContent = '••••••••••••••••';
+                    // Меняем иконки обратно на глазики
+                    const container = token.closest('.token-container');
+                    if (container) {
+                        const viewBtn = container.querySelector('.view-btn i');
+                        if (viewBtn) {
+                            viewBtn.classList.remove('bi-eye-slash');
+                            viewBtn.classList.add('bi-eye');
+                        }
+                    }
+                }
+            });
+        }, 30000); // 30 секунд
+    }
+
+    // Сбрасываем таймер при активности
+    document.addEventListener('mousemove', resetInactivityTimer);
+    document.addEventListener('keypress', resetInactivityTimer);
+    resetInactivityTimer();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
