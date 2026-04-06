@@ -1,9 +1,10 @@
 package ru.skillfactory.vkrbot.handler;
 
 import ru.skillfactory.vkrbot.model.*;
+import ru.skillfactory.vkrbot.repository.DeadlineRepository;
+import ru.skillfactory.vkrbot.repository.TaskRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.skillfactory.vkrbot.service.TelegramBotService;
 
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -14,177 +15,143 @@ import java.util.Map;
 @Slf4j
 public class StudentHandler extends BaseHandler {
 
-    private final Map<Long, List<User>> studentListCache = new HashMap<>();
-    private final Map<Long, User> selectedStudents = new HashMap<>();
+    private final DeadlineRepository deadlineRepository;
+    private final TaskRepository taskRepository;
+    private final TaskHandler taskHandler;
 
-    private final DeadlineHandler deadlineHandler;
+    private final Map<Long, List<Deadline>> studentDeadlinesState = new HashMap<>();
+    private final Map<Long, List<Task>> studentTasksState = new HashMap<>();
+    private final Map<Long, Deadline> currentDeadlineCache = new HashMap<>();
 
-    public StudentHandler(DeadlineHandler deadlineHandler) {
-        this.deadlineHandler = deadlineHandler;
+    public StudentHandler(DeadlineRepository deadlineRepository,
+                          TaskRepository taskRepository,
+                          TaskHandler taskHandler) {
+        this.deadlineRepository = deadlineRepository;
+        this.taskRepository = taskRepository;
+        this.taskHandler = taskHandler;
     }
 
-    public boolean handleStudentSelection(long chatId, String messageText, User user) {
-        if (user.getRole() == Role.SUPERVISOR && studentListCache.containsKey(chatId)) {
-            try {
-                int studentNumber = Integer.parseInt(messageText) - 1;
-                List<User> students = studentListCache.get(chatId);
-                if (studentNumber >= 0 && studentNumber < students.size()) {
-                    User selectedStudent = students.get(studentNumber);
-                    studentListCache.remove(chatId);
-                    showStudentTasks(chatId, selectedStudent, user);
-                    return true;
-                } else {
-                    sendTextMessage(chatId, "❌ Неверный номер студента.");
-                    return true;
-                }
-            } catch (NumberFormatException e) {
-                studentListCache.remove(chatId);
-                botService.getNavigationHandler().sendMainMenu(chatId, user);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean handleStudentChoice(long chatId, String messageText, User user) {
-        if (user.getRole() == Role.SUPERVISOR && selectedStudents.containsKey(chatId)) {
-            if (messageText.equals("🔙 Назад к студентам")) {
-                selectedStudents.remove(chatId);
-                deadlineHandler.clearSelectedDeadline(chatId);
-                showStudentsList(chatId, user);
-                return true;
-            }
-
-            if (messageText.equals("➕ Добавить дедлайн")) {
-                User selectedStudent = selectedStudents.get(chatId);
-                if (selectedStudent != null) {
-                    deadlineHandler.startCreation(chatId, selectedStudent, user);
-                    return true;
-                }
-            }
-
-            if (messageText.equals("🔙 Назад к дедлайнам")) {
-                deadlineHandler.clearSelectedDeadline(chatId);
-                User selectedStudent = selectedStudents.get(chatId);
-                if (selectedStudent != null) {
-                    sendMessageWithStudentTasksMenu(chatId, selectedStudent, user);
-                }
-                return true;
-            }
-
-            try {
-                int deadlineNumber = Integer.parseInt(messageText) - 1;
-                User selectedStudent = selectedStudents.get(chatId);
-                List<Deadline> deadlines = botService.getDeadlineRepository()
-                        .findByStudentAndSupervisorWithTasks(selectedStudent, user);
-                if (deadlineNumber >= 0 && deadlineNumber < deadlines.size()) {
-                    deadlineHandler.showTasksMenu(chatId, deadlines.get(deadlineNumber), user);
-                    return true;
-                }
-            } catch (NumberFormatException e) {
-            }
-
-            sendMessageWithStudentTasksMenu(chatId, selectedStudents.get(chatId), user);
-            return true;
-        }
-        return false;
-    }
-
-    public void showStudentsList(long chatId, User supervisor) {
-        log.info("=== SHOW STUDENTS LIST ===");
-        List<User> students = botService.getUserRepository().findBySupervisor(supervisor);
-
-        if (students.isEmpty()) {
-            botService.getNavigationHandler().sendMainMenu(chatId, supervisor);
-            return;
-        }
-
-        StringBuilder message = new StringBuilder("📋 Ваши студенты:\n\n");
-
-        for (int i = 0; i < students.size(); i++) {
-            User student = students.get(i);
-            List<Deadline> deadlines = botService.getDeadlineRepository()
-                    .findByStudentAndSupervisorWithTasks(student, supervisor);
-            int totalTasks = deadlines.stream().mapToInt(d -> d.getTasks().size()).sum();
-            message.append(String.format("%d. %s (задач: %d)\n", i + 1, student.getFullName(), totalTasks));
-        }
-
-        message.append("\nВведите номер студента для просмотра его задач:");
-
-        sendMessageWithKeyboard(chatId, message.toString(),
-                botService.getNavigationHandler().getKeyboardForRole(supervisor.getRole()));
-
-        studentListCache.put(chatId, students);
-    }
-
-    public void showStudentTasks(long chatId, User student, User supervisor) {
-        selectedStudents.put(chatId, student);
-        sendMessageWithStudentTasksMenu(chatId, student, supervisor);
-    }
-
-    private void sendMessageWithStudentTasksMenu(long chatId, User student, User supervisor) {
-        List<Deadline> deadlines = botService.getDeadlineRepository()
-                .findByStudentAndSupervisorWithTasks(student, supervisor);
-
+    public void showDiplomaInfo(long chatId, User student) {
         StringBuilder message = new StringBuilder();
-        message.append("📚 Студент: ").append(student.getFullName()).append("\n\n");
-        message.append("📋 Дедлайны и задачи:\n\n");
-
-        if (deadlines.isEmpty()) {
-            message.append("Нет дедлайнов.\n");
+        message.append("🎓 ДИПЛОМ\n\n");
+        message.append("Тема: ").append(student.getDiplomaSubject() != null ? student.getDiplomaSubject() : "не указана").append("\n\n");
+        if (student.getSupervisor() != null) {
+            message.append("Научный руководитель: ").append(student.getSupervisor().getFullName());
         } else {
-            for (int i = 0; i < deadlines.size(); i++) {
-                Deadline deadline = deadlines.get(i);
-                message.append(String.format("%d. %s\n", i + 1, deadline.getTitle()));
-                message.append(String.format("   ⏰ Дедлайн: %s\n",
-                        deadline.getDeadlineDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))));
-                message.append(String.format("   📝 Задач: %d\n", deadline.getTasks().size()));
-
-                if (!deadline.getTasks().isEmpty()) {
-                    message.append("   Задачи:\n");
-                    for (int j = 0; j < deadline.getTasks().size(); j++) {
-                        Task task = deadline.getTasks().get(j);
-                        String statusEmoji = getStatusEmoji(task.getStatus());
-                        message.append(String.format("      %d.%d. %s %s\n", i + 1, j + 1, statusEmoji, task.getTitle()));
-                    }
-                }
-                message.append("\n");
-            }
+            message.append("Научный руководитель: не назначен");
         }
-
-        message.append("\nВведите номер дедлайна для управления задачами.");
-
-        sendMessageWithKeyboard(chatId, message.toString(),
-                botService.getNavigationHandler().getDeadlineKeyboard());
+        botService.getNavigationHandler().sendMessageWithKeyboard(chatId, message.toString(),
+                botService.getNavigationHandler().getStudentDiplomaKeyboard());
     }
 
     public void showSupervisorInfo(long chatId, User student) {
         if (student.getSupervisor() == null) {
-            sendTextMessage(chatId, "❌ У вас еще не назначен научный руководитель.");
+            botService.getNavigationHandler().sendMessageWithKeyboard(chatId,
+                    "❌ Научный руководитель не назначен.",
+                    botService.getNavigationHandler().getStudentMainKeyboard());
+            return;
+        }
+        User supervisor = student.getSupervisor();
+        StringBuilder message = new StringBuilder();
+        message.append("👨‍🏫 Научный руководитель:\n\n");
+        message.append("ФИО: ").append(supervisor.getFullName()).append("\n");
+        message.append("Email: ").append(supervisor.getEmail()).append("\n");
+        if (supervisor.getPhone() != null) {
+            message.append("Телефон: ").append(supervisor.getPhone()).append("\n");
+        }
+        if (supervisor.getTelegram() != null) {
+            message.append("Telegram: ").append(supervisor.getTelegram()).append("\n");
+        }
+        botService.getNavigationHandler().sendMessageWithKeyboard(chatId, message.toString(),
+                botService.getNavigationHandler().getStudentMainKeyboard());
+    }
+
+    public void showStudentDeadlines(long chatId, User student) {
+        List<Deadline> deadlines = deadlineRepository.findByStudent(student);
+        studentDeadlinesState.put(chatId, deadlines);
+        studentTasksState.remove(chatId);
+        currentDeadlineCache.remove(chatId);
+
+        if (deadlines.isEmpty()) {
+            botService.getNavigationHandler().sendMessageWithKeyboard(chatId,
+                    "📋 Нет дедлайнов.",
+                    botService.getNavigationHandler().getStudentDeadlinesKeyboard());
             return;
         }
 
-        User supervisor = student.getSupervisor();
-        String message = String.format(
-                "🎓 Ваш научный руководитель:\n\n" +
-                        "👤 ФИО: %s\n" +
-                        "📧 Email: %s\n" +
-                        "%s%s",
-                supervisor.getFullName(),
-                supervisor.getEmail(),
-                supervisor.getPhone() != null ? "📞 Телефон: " + supervisor.getPhone() + "\n" : "",
-                supervisor.getTelegram() != null ? "✈️ Telegram: " + supervisor.getTelegram() : ""
-        );
-
-        sendTextMessage(chatId, message);
+        StringBuilder message = new StringBuilder();
+        message.append("📋 ДЕДЛАЙНЫ\n\n");
+        for (int i = 0; i < deadlines.size(); i++) {
+            Deadline deadline = deadlines.get(i);
+            message.append(String.format("%d. %s\n", i + 1, deadline.getTitle()));
+            message.append(String.format("   ⏰ Дата: %s\n",
+                    deadline.getDeadlineDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
+            message.append("\n");
+        }
+        message.append("Введите номер дедлайна для просмотра задач.");
+        botService.getNavigationHandler().sendMessageWithKeyboard(chatId, message.toString(),
+                botService.getNavigationHandler().getStudentDeadlinesKeyboard());
     }
 
-    public void setBotService(TelegramBotService botService) {
-        super.setBotService(botService);
-        deadlineHandler.setBotService(botService);
+    public void showStudentTasksForDeadline(long chatId, Deadline deadline, User student) {
+        List<Task> tasks = taskRepository.findByDeadline(deadline);
+        studentTasksState.put(chatId, tasks);
+        studentDeadlinesState.remove(chatId);
+        currentDeadlineCache.put(chatId, deadline);
+
+        if (tasks.isEmpty()) {
+            botService.getNavigationHandler().sendMessageWithKeyboard(chatId,
+                    String.format("📌 %s\n\nНет задач.", deadline.getTitle()),
+                    botService.getNavigationHandler().getStudentTasksKeyboard());
+            return;
+        }
+
+        StringBuilder message = new StringBuilder();
+        message.append("📌 ").append(deadline.getTitle()).append("\n\n");
+        message.append("📋 ЗАДАЧИ:\n\n");
+        for (int i = 0; i < tasks.size(); i++) {
+            Task task = tasks.get(i);
+            String statusEmoji = getStatusEmoji(task.getStatus());
+            message.append(String.format("%d. %s %s\n", i + 1, statusEmoji, task.getTitle()));
+        }
+        message.append("\nВведите номер задачи для просмотра деталей.");
+        botService.getNavigationHandler().sendMessageWithKeyboard(chatId, message.toString(),
+                botService.getNavigationHandler().getStudentTasksKeyboard());
     }
 
-    public void showTasksMenuByDeadline(long chatId, Deadline deadline, User user) {
-        deadlineHandler.showTasksMenu(chatId, deadline, user);
+    public boolean handleStudentDeadlineSelection(long chatId, String messageText, User student) {
+        if (!studentDeadlinesState.containsKey(chatId)) {
+            return false;
+        }
+        try {
+            int deadlineNumber = Integer.parseInt(messageText) - 1;
+            List<Deadline> deadlines = studentDeadlinesState.get(chatId);
+            if (deadlineNumber >= 0 && deadlineNumber < deadlines.size()) {
+                showStudentTasksForDeadline(chatId, deadlines.get(deadlineNumber), student);
+                return true;
+            }
+        } catch (NumberFormatException e) {
+        }
+        return false;
+    }
+
+    public boolean handleStudentTaskSelection(long chatId, String messageText, User student) {
+        if (!studentTasksState.containsKey(chatId)) {
+            return false;
+        }
+        try {
+            int taskNumber = Integer.parseInt(messageText) - 1;
+            List<Task> tasks = studentTasksState.get(chatId);
+            if (taskNumber >= 0 && taskNumber < tasks.size()) {
+                taskHandler.showForAction(chatId, tasks.get(taskNumber), student);
+                return true;
+            }
+        } catch (NumberFormatException e) {
+        }
+        return false;
+    }
+
+    public Deadline getCurrentDeadline(long chatId) {
+        return currentDeadlineCache.get(chatId);
     }
 }

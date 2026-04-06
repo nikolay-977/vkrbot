@@ -72,7 +72,7 @@ public class CommentMenuHandler extends BaseHandler {
 
         List<String> row2 = new ArrayList<>();
         row2.add("🔙 Назад к задаче");
-        row2.add("Главное меню");
+        row2.add("🏠Главное меню");
         buttons.add(row2);
 
         return createKeyboard(buttons);
