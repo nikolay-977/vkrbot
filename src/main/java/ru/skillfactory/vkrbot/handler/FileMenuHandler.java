@@ -2,6 +2,7 @@ package ru.skillfactory.vkrbot.handler;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.telegram.telegrambots.meta.api.objects.Document;
 import ru.skillfactory.vkrbot.dto.AttachedFile;
 import ru.skillfactory.vkrbot.model.*;
 import ru.skillfactory.vkrbot.repository.CommentRepository;
@@ -87,7 +88,7 @@ public class FileMenuHandler extends BaseHandler {
 
         List<String> row2 = new ArrayList<>();
         row2.add("🔙 Назад к задаче");
-        row2.add("Главное меню");
+        row2.add("🏠Главное меню");
         buttons.add(row2);
 
         return createKeyboard(buttons);
@@ -98,7 +99,7 @@ public class FileMenuHandler extends BaseHandler {
         sendTextMessage(chatId, "📎 Отправьте файл, который хотите прикрепить к задаче.\n\nПоддерживаются любые форматы.");
     }
 
-    public void handleFileUpload(long chatId, org.telegram.telegrambots.meta.api.objects.Document document, User user) {
+    public void handleFileUpload(long chatId, Document document, User user) {
         Task task = fileUploadState.get(chatId);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");

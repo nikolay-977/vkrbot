@@ -78,8 +78,4 @@ public abstract class BaseHandler {
             default: return "📌";
         }
     }
-
-    public void execute(SendMessage message) throws TelegramApiException {
-        botService.execute(message);
-    }
 }

@@ -46,8 +46,12 @@ public class UserHandler extends BaseHandler {
                     user.getFullName(), getRoleDisplayName(user.getRole())
             );
 
-            botService.getNavigationHandler().sendMainMenu(chatId, user);
-
+            if (user.getRole() == Role.STUDENT) {
+                botService.getNavigationHandler().sendMessageWithKeyboard(chatId, successMessage,
+                        botService.getNavigationHandler().getStudentMainKeyboard());
+            } else {
+                botService.getNavigationHandler().sendMainMenu(chatId, user);
+            }
         } catch (Exception e) {
             log.error("Error validating token for chat {}: {}", chatId, e.getMessage());
             sendTextMessage(chatId, "❌ Ошибка при проверке токена.");

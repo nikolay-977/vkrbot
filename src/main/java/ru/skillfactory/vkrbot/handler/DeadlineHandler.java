@@ -35,19 +35,16 @@ public class DeadlineHandler extends BaseHandler {
         if (!selectedDeadlines.containsKey(chatId)) {
             return false;
         }
-
         if (messageText.equals("➕ Добавить задачу")) {
             Deadline currentDeadline = selectedDeadlines.get(chatId);
             taskHandler.startCreation(chatId, currentDeadline, user);
             return true;
         }
-
         try {
             int taskNumber = Integer.parseInt(messageText) - 1;
             Deadline deadline = selectedDeadlines.get(chatId);
             if (taskNumber >= 0 && taskNumber < deadline.getTasks().size()) {
                 Task selectedTask = deadline.getTasks().get(taskNumber);
-                log.info("Selected task: {} for deadline: {}", selectedTask.getTitle(), deadline.getTitle());
                 taskHandler.showForAction(chatId, selectedTask, user);
                 return true;
             } else {
@@ -61,14 +58,12 @@ public class DeadlineHandler extends BaseHandler {
 
     public void handleCreation(long chatId, String messageText) {
         DeadlineCreationState state = deadlineCreationStates.get(chatId);
-
-        if (messageText.equals("Главное меню") || messageText.equals("🔙 Назад к студентам")) {
+        if (messageText.equals("🏠Главное меню") || messageText.equals("🔙 Назад к студентам")) {
             deadlineCreationStates.remove(chatId);
             botService.getNavigationHandler().sendMainMenu(chatId,
                     botService.getTelegramService().getUserByChatId(chatId).orElse(null));
             return;
         }
-
         switch (state.getStep()) {
             case 0:
                 state.setTitle(messageText);
@@ -85,23 +80,18 @@ public class DeadlineHandler extends BaseHandler {
                     LocalDateTime deadlineDate = LocalDateTime.parse(messageText,
                             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
                     state.setDeadlineDate(deadlineDate);
-
                     Deadline deadline = new Deadline();
                     deadline.setTitle(state.getTitle());
                     deadline.setDescription(state.getDescription());
                     deadline.setDeadlineDate(state.getDeadlineDate());
                     deadline.setStudent(state.getStudent());
-
                     Optional<User> supervisorOpt = botService.getTelegramService().getUserByChatId(chatId);
                     supervisorOpt.ifPresent(deadline::setSupervisor);
-
                     Deadline savedDeadline = botService.getDeadlineRepository().save(deadline);
                     selectedDeadlines.put(chatId, savedDeadline);
-
                     sendTextMessage(chatId, "✅ Дедлайн успешно создан!");
                     deadlineCreationStates.remove(chatId);
                     showTasksMenu(chatId, savedDeadline, supervisorOpt.get());
-
                 } catch (Exception e) {
                     sendTextMessage(chatId, "❌ Неверный формат даты.");
                 }
@@ -121,13 +111,11 @@ public class DeadlineHandler extends BaseHandler {
         Deadline loadedDeadline = botService.getDeadlineRepository()
                 .findByIdWithTasks(deadline.getId()).orElse(deadline);
         selectedDeadlines.put(chatId, loadedDeadline);
-
         StringBuilder message = new StringBuilder();
         message.append("📌 Дедлайн: ").append(loadedDeadline.getTitle()).append("\n");
         message.append("⏰ Дата: ").append(loadedDeadline.getDeadlineDate()
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))).append("\n");
         message.append("📋 Задачи:\n\n");
-
         if (loadedDeadline.getTasks().isEmpty()) {
             message.append("Нет задач.\n");
         } else {
@@ -137,10 +125,26 @@ public class DeadlineHandler extends BaseHandler {
                 message.append(String.format("%d. %s %s\n", i + 1, statusEmoji, task.getTitle()));
             }
         }
-
         message.append("\nВведите номер задачи для просмотра деталей.");
-
         sendMessageWithKeyboard(chatId, message.toString(),
-                botService.getNavigationHandler().getTaskKeyboard());
+                botService.getNavigationHandler().getSupervisorTaskKeyboard());
+    }
+
+    private static class DeadlineCreationState {
+        private int step = 0;
+        private String title;
+        private String description;
+        private LocalDateTime deadlineDate;
+        private User student;
+        public int getStep() { return step; }
+        public void setStep(int step) { this.step = step; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public LocalDateTime getDeadlineDate() { return deadlineDate; }
+        public void setDeadlineDate(LocalDateTime deadlineDate) { this.deadlineDate = deadlineDate; }
+        public User getStudent() { return student; }
+        public void setStudent(User student) { this.student = student; }
     }
 }
