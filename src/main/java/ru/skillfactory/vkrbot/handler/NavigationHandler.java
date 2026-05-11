@@ -23,7 +23,15 @@ public class NavigationHandler extends BaseHandler {
     }
 
     public void sendMainMenu(long chatId, User user) {
-        sendMessageWithKeyboard(chatId, "🏠Главное меню:", getKeyboardForRole(user.getRole()));
+        String welcome = String.format(
+                "🏠 Главное меню\n\n" +
+                        "Добро пожаловать, %s!\n" +
+                        "Роль: %s\n\n" +
+                        "Выберите действие с помощью кнопок ниже.",
+                user.getFullName(),
+                user.getRole() == Role.STUDENT ? "Студент" : "Научный руководитель"
+        );
+        sendMessageWithKeyboard(chatId, welcome, getKeyboardForRole(user.getRole()));
     }
 
     public ReplyKeyboardMarkup getKeyboardForRole(Role role) {
