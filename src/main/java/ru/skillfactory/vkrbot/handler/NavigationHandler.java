@@ -1,8 +1,6 @@
 package ru.skillfactory.vkrbot.handler;
 
 import ru.skillfactory.vkrbot.model.Role;
-import ru.skillfactory.vkrbot.model.Status;
-import ru.skillfactory.vkrbot.model.Task;
 import ru.skillfactory.vkrbot.model.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,19 +16,22 @@ public class NavigationHandler extends BaseHandler {
     public boolean handleNavigation(long chatId, String messageText, User user) {
         if (messageText.equals("🏠Главное меню") || messageText.equals("/start")) {
             log.info("=== BACK TO MAIN MENU ===");
-            clearAllStates(chatId);
             sendMainMenu(chatId, user);
             return true;
         }
         return false;
     }
 
-    public void clearAllStates(long chatId) {
-        botService.getUserStates().remove(chatId);
-    }
-
     public void sendMainMenu(long chatId, User user) {
-        sendMessageWithKeyboard(chatId, "🏠Главное меню:", getKeyboardForRole(user.getRole()));
+        String welcome = String.format(
+                "🏠 Главное меню\n\n" +
+                        "Добро пожаловать, %s!\n" +
+                        "Роль: %s\n\n" +
+                        "Выберите действие с помощью кнопок ниже.",
+                user.getFullName(),
+                user.getRole() == Role.STUDENT ? "Студент" : "Научный руководитель"
+        );
+        sendMessageWithKeyboard(chatId, welcome, getKeyboardForRole(user.getRole()));
     }
 
     public ReplyKeyboardMarkup getKeyboardForRole(Role role) {

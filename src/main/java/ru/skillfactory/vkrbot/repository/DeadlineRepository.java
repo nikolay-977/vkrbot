@@ -12,13 +12,11 @@ import java.util.Optional;
 @Repository
 public interface DeadlineRepository extends JpaRepository<Deadline, Long> {
 
-    List<Deadline> findByStudent(User student);
-
-    List<Deadline> findBySupervisor(User supervisor);
-
     @Query("SELECT DISTINCT d FROM Deadline d LEFT JOIN FETCH d.tasks WHERE d.student = :student AND d.supervisor = :supervisor ORDER BY d.deadlineDate")
     List<Deadline> findByStudentAndSupervisorWithTasks(@Param("student") User student, @Param("supervisor") User supervisor);
 
     @Query("SELECT d FROM Deadline d LEFT JOIN FETCH d.tasks WHERE d.id = :id")
     Optional<Deadline> findByIdWithTasks(@Param("id") Long id);
+
+    List<Deadline> findByStudentOrderByDeadlineDateAsc(User student);
 }

@@ -18,7 +18,7 @@ public class DataInitializer implements CommandLineRunner {
     private final PasswordEncoder passwordEncoder;
 
     @Override
-    public void run(String... args) throws Exception {
+    public void run(String... args) {
         if (!userRepository.existsByEmail("admin@admin.com")) {
             User admin = new User();
             admin.setFullName("Администратор");

@@ -8,9 +8,11 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import ru.skillfactory.vkrbot.dto.AttachedFile;
 import ru.skillfactory.vkrbot.model.*;
 import ru.skillfactory.vkrbot.repository.CommentRepository;
+import ru.skillfactory.vkrbot.service.StateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -19,27 +21,15 @@ import java.util.*;
 @Slf4j
 public class TaskHandler extends BaseHandler {
 
-    private final Map<Long, TaskCreationState> taskCreationStates = new HashMap<>();
-    private final Map<Long, Task> selectedTaskForAction = new HashMap<>();
-    private final Map<Long, TaskEditState> taskEditStates = new HashMap<>();
-    private final Map<Long, String> reviewCommentStates = new HashMap<>();
-    private final Map<Long, Deadline> currentDeadlineCache = new HashMap<>();
-    private final Map<Long, Task> addCommentState = new HashMap<>();
-    private final Map<Long, Task> fileUploadState = new HashMap<>();
-    private final Map<Long, Task> fileViewState = new HashMap<>();
-    private final Map<Long, Task> criteriaMenuState = new HashMap<>();
-    private final Map<Long, String> criteriaActionState = new HashMap<>();
-    private final Map<Long, Task> pendingReviewState = new HashMap<>();
-    private final Map<Long, Task> pendingCommentState = new HashMap<>();
-    private final Map<Long, Task> pendingFileState = new HashMap<>();
-
     private final CommentRepository commentRepository;
+    private final StateService stateService;
     private CommentMenuHandler commentMenuHandler;
     private FileMenuHandler fileMenuHandler;
     private DeadlineHandler deadlineHandler;
 
-    public TaskHandler(CommentRepository commentRepository) {
+    public TaskHandler(CommentRepository commentRepository, StateService stateService) {
         this.commentRepository = commentRepository;
+        this.stateService = stateService;
     }
 
     public void setDeadlineHandler(DeadlineHandler deadlineHandler) {
@@ -54,66 +44,61 @@ public class TaskHandler extends BaseHandler {
         this.fileMenuHandler = fileMenuHandler;
     }
 
-    public boolean isInTaskView(long chatId) {
-        return selectedTaskForAction.containsKey(chatId);
-    }
+    private String taskCreationKey(long chatId) { return "taskCreation:" + chatId; }
+    private String selectedTaskIdKey(long chatId) { return "selectedTaskId:" + chatId; }
+    private String taskEditKey(long chatId) { return "taskEdit:" + chatId; }
+    private String reviewCommentKey(long chatId) { return "reviewComment:" + chatId; }
+    private String currentDeadlineIdKey(long chatId) { return "currentDeadlineId:" + chatId; }
+    private String criteriaMenuTaskIdKey(long chatId) { return "criteriaMenuTaskId:" + chatId; }
+    private String criteriaActionKey(long chatId) { return "criteriaAction:" + chatId; }
+    private String pendingReviewTaskIdKey(long chatId) { return "pendingReviewTaskId:" + chatId; }
+    private String pendingCommentTaskIdKey(long chatId) { return "pendingCommentTaskId:" + chatId; }
+    private String pendingFileTaskIdKey(long chatId) { return "pendingFileTaskId:" + chatId; }
 
-    public Task getCurrentTask(long chatId) {
-        return selectedTaskForAction.get(chatId);
+    public boolean isInTaskView(long chatId) {
+        return stateService.hasState(selectedTaskIdKey(chatId));
     }
 
     public boolean isInCreationState(long chatId) {
-        return taskCreationStates.containsKey(chatId);
+        return stateService.hasState(taskCreationKey(chatId));
     }
 
     public boolean isInEditState(long chatId) {
-        return taskEditStates.containsKey(chatId);
+        return stateService.hasState(taskEditKey(chatId));
     }
 
     public boolean isInReviewCommentState(long chatId) {
-        return reviewCommentStates.containsKey(chatId);
-    }
-
-    public boolean isInAddCommentState(long chatId) {
-        return addCommentState.containsKey(chatId);
-    }
-
-    public boolean isInFileUploadState(long chatId) {
-        return fileUploadState.containsKey(chatId);
-    }
-
-    public boolean isInFileViewState(long chatId) {
-        return fileViewState.containsKey(chatId);
+        return stateService.hasState(reviewCommentKey(chatId));
     }
 
     public boolean isInCriteriaMenu(long chatId) {
-        return criteriaMenuState.containsKey(chatId);
+        return stateService.hasState(criteriaMenuTaskIdKey(chatId));
     }
 
     public boolean isInPendingReviewState(long chatId) {
-        return pendingReviewState.containsKey(chatId);
+        return stateService.hasState(pendingReviewTaskIdKey(chatId));
     }
 
     public boolean isInPendingCommentState(long chatId) {
-        return pendingCommentState.containsKey(chatId);
+        return stateService.hasState(pendingCommentTaskIdKey(chatId));
     }
 
     public boolean isInPendingFileState(long chatId) {
-        return pendingFileState.containsKey(chatId);
+        return stateService.hasState(pendingFileTaskIdKey(chatId));
     }
 
     public void startCreation(long chatId, Deadline deadline, User supervisor) {
         TaskCreationState state = new TaskCreationState();
-        state.setDeadline(deadline);
+        state.setDeadlineId(deadline.getId());
         state.setStep(0);
-        taskCreationStates.put(chatId, state);
+        stateService.saveState(taskCreationKey(chatId), state);
         sendTextMessage(chatId, "Введите название задачи:");
     }
 
     public void showForAction(long chatId, Task task, User user) {
         log.info("=== SHOW FOR ACTION ===");
-        selectedTaskForAction.put(chatId, task);
-        currentDeadlineCache.put(chatId, task.getDeadline());
+        stateService.saveState(selectedTaskIdKey(chatId), task.getId());
+        stateService.saveState(currentDeadlineIdKey(chatId), task.getDeadline().getId());
         showTaskDetails(chatId, task, user);
     }
 
@@ -232,10 +217,14 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handleCreation(long chatId, String messageText) {
-        TaskCreationState state = taskCreationStates.get(chatId);
+        TaskCreationState state = stateService.getState(taskCreationKey(chatId), TaskCreationState.class);
+        if (state == null) {
+            sendTextMessage(chatId, "❌ Сессия создания задачи истекла. Начните заново.");
+            return;
+        }
 
         if (messageText.equals("🏠Главное меню") || messageText.equals("🔙 Назад к дедлайнам")) {
-            taskCreationStates.remove(chatId);
+            stateService.removeState(taskCreationKey(chatId));
             botService.getNavigationHandler().sendMainMenu(chatId,
                     botService.getTelegramService().getUserByChatId(chatId).orElse(null));
             return;
@@ -245,14 +234,27 @@ public class TaskHandler extends BaseHandler {
             case 0:
                 state.setTitle(messageText);
                 state.setStep(1);
+                stateService.saveState(taskCreationKey(chatId), state);
                 sendTextMessage(chatId, "Введите описание задачи:");
                 break;
             case 1:
                 state.setDescription(messageText);
                 state.setStep(2);
-                sendTextMessage(chatId, "Введите критерий (или 'готово'):");
+                stateService.saveState(taskCreationKey(chatId), state);
+                sendTextMessage(chatId, "Введите критерий выполнения задачи:\n\n" +
+                        "Нужно добавить хотя бы один критерий.\n" +
+                        "Критерий — это конкретный пункт, например:\n" +
+                        "• «Провести обзор литературы»\n\n" +
+                        "Вы можете добавить несколько критериев, вводя их по очереди.\n" +
+                        "После добавления всех критериев введите 'готово'.");
                 break;
             case 2:
+                if (messageText.equals("🏠Главное меню") || messageText.equals("🔙 Назад к дедлайнам")) {
+                    stateService.removeState(taskCreationKey(chatId));
+                    botService.getTelegramService().getUserByChatId(chatId).ifPresent(u ->
+                            botService.getNavigationHandler().sendMainMenu(chatId, u));
+                    return;
+                }
                 if (messageText.equalsIgnoreCase("готово")) {
                     completeTaskCreation(chatId, state);
                 } else {
@@ -260,6 +262,7 @@ public class TaskHandler extends BaseHandler {
                         state.setCompletionCriteriaList(new ArrayList<>());
                     }
                     state.getCompletionCriteriaList().add(messageText);
+                    stateService.saveState(taskCreationKey(chatId), state);
                     sendTextMessage(chatId, "✅ Критерий добавлен! Введите следующий (или 'готово'):");
                 }
                 break;
@@ -267,13 +270,40 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handleEdit(long chatId, String messageText) {
-        TaskEditState state = taskEditStates.get(chatId);
-        Task task = state.getTask();
+        TaskEditState state = stateService.getState(taskEditKey(chatId), TaskEditState.class);
+        if (state == null) {
+            sendTextMessage(chatId, "❌ Сессия редактирования истекла. Начните заново.");
+            return;
+        }
+
+        Task currentTask = botService.getTaskRepository().findById(state.getTaskId()).orElse(null);
+        if (currentTask == null) {
+            sendTextMessage(chatId, "❌ Задача не найдена.");
+            stateService.removeState(taskEditKey(chatId));
+            return;
+        }
 
         if (messageText.equals("🏠Главное меню")) {
-            taskEditStates.remove(chatId);
-            botService.getNavigationHandler().sendMainMenu(chatId,
-                    botService.getTelegramService().getUserByChatId(chatId).orElse(null));
+            stateService.removeState(taskEditKey(chatId));
+            botService.getNavigationHandler().sendMainMenu(chatId, currentTask.getSupervisor());
+            return;
+        }
+
+        if (messageText.equals("🔙 Назад") || messageText.equals("❌ Отменить")) {
+            stateService.removeState(taskEditKey(chatId));
+            showTaskDetails(chatId, currentTask, currentTask.getSupervisor());
+            return;
+        }
+
+        if (messageText.equals("💬 Комментарии")) {
+            stateService.removeState(taskEditKey(chatId));
+            commentMenuHandler.showCommentMenu(chatId, currentTask, currentTask.getSupervisor());
+            return;
+        }
+
+        if (messageText.equals("📎 Файлы")) {
+            stateService.removeState(taskEditKey(chatId));
+            fileMenuHandler.showFileMenu(chatId, currentTask, currentTask.getSupervisor());
             return;
         }
 
@@ -281,23 +311,31 @@ public class TaskHandler extends BaseHandler {
             case 0:
                 state.setTitle(messageText);
                 state.setStep(1);
+                stateService.saveState(taskEditKey(chatId), state);
                 sendTextMessage(chatId, "Введите новое описание (или 'пропустить'):");
                 break;
             case 1:
-                if (!messageText.equalsIgnoreCase("пропустить")) {
+                if (messageText.equalsIgnoreCase("пропустить")) {
+                    state.setDescription(null);
+                } else {
                     state.setDescription(messageText);
                 }
                 state.setStep(2);
-                sendTextMessage(chatId, "Введите новые критерии (по одному, 'готово' для завершения):");
                 if (state.getCriteriaList() == null) {
                     state.setCriteriaList(new ArrayList<>());
                 }
+                stateService.saveState(taskEditKey(chatId), state);
+                sendTextMessage(chatId, "Введите новые критерии (по одному, 'готово' для завершения):");
                 break;
             case 2:
                 if (messageText.equalsIgnoreCase("готово")) {
                     completeTaskEdit(chatId, state);
                 } else {
+                    if (state.getCriteriaList() == null) {
+                        state.setCriteriaList(new ArrayList<>());
+                    }
                     state.getCriteriaList().add(messageText);
+                    stateService.saveState(taskEditKey(chatId), state);
                     sendTextMessage(chatId, "✅ Критерий добавлен! Введите следующий (или 'готово'):");
                 }
                 break;
@@ -305,14 +343,19 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handleReviewComment(long chatId, String messageText) {
-        String taskIdStr = reviewCommentStates.get(chatId);
-        Task task = botService.getTaskRepository().findById(Long.parseLong(taskIdStr)).orElse(null);
+        String taskIdStr = stateService.getState(reviewCommentKey(chatId), String.class);
+        Task task = null;
+        if (taskIdStr != null) {
+            task = botService.getTaskRepository().findById(Long.parseLong(taskIdStr)).orElse(null);
+        }
 
         if (task == null) {
             sendTextMessage(chatId, "❌ Задача не найдена.");
-            reviewCommentStates.remove(chatId);
+            stateService.removeState(reviewCommentKey(chatId));
             return;
         }
+
+        final Task finalTask = task;
 
         task.setStatus(Status.NEED_IMPROVEMENT);
         task.setReviewComment(messageText);
@@ -320,22 +363,21 @@ public class TaskHandler extends BaseHandler {
 
         sendTextMessage(chatId, "✅ Задача отправлена на доработку!");
 
-        botService.getTelegramService().getChatIdByUser(task.getStudent()).ifPresent(studentChatId -> {
-            sendTextMessage(studentChatId, "🔄 Задача \"" + task.getTitle() + "\" требует доработки!\n\n" +
+        botService.getTelegramService().getChatIdByUser(finalTask.getStudent()).ifPresent(studentChatId -> {
+            sendTextMessage(studentChatId, "🔄 Задача \"" + finalTask.getTitle() + "\" требует доработки!\n\n" +
                     "Комментарий: " + messageText);
         });
 
-        reviewCommentStates.remove(chatId);
-        selectedTaskForAction.put(chatId, savedTask);
+        stateService.removeState(reviewCommentKey(chatId));
+        stateService.saveState(selectedTaskIdKey(chatId), savedTask.getId());
         showTaskDetails(chatId, savedTask, task.getSupervisor());
     }
 
     public boolean handleTaskAction(long chatId, String messageText, User user) {
-        if (!selectedTaskForAction.containsKey(chatId)) {
-            return false;
-        }
-
-        Task task = selectedTaskForAction.get(chatId);
+        Long taskId = stateService.getState(selectedTaskIdKey(chatId), Long.class);
+        if (taskId == null) return false;
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+        if (task == null) return false;
 
         if (user.getRole() == Role.SUPERVISOR) {
             switch (messageText) {
@@ -358,9 +400,12 @@ public class TaskHandler extends BaseHandler {
                     fileMenuHandler.showFileMenu(chatId, task, user);
                     return true;
                 case "🔙 Назад":
-                    Deadline deadline = currentDeadlineCache.get(chatId);
-                    if (deadline != null && deadlineHandler != null) {
-                        deadlineHandler.showTasksMenu(chatId, deadline, user);
+                    Long deadlineId = stateService.getState(currentDeadlineIdKey(chatId), Long.class);
+                    if (deadlineId != null && deadlineHandler != null) {
+                        Deadline deadline = botService.getDeadlineRepository().findByIdWithTasks(deadlineId).orElse(null);
+                        if (deadline != null) {
+                            deadlineHandler.showTasksMenu(chatId, deadline, user);
+                        }
                     }
                     return true;
                 default:
@@ -384,9 +429,12 @@ public class TaskHandler extends BaseHandler {
                     fileMenuHandler.showFileMenu(chatId, task, user);
                     return true;
                 case "🔙 Назад к задачам":
-                    Deadline deadline = currentDeadlineCache.get(chatId);
-                    if (deadline != null && deadlineHandler != null) {
-                        deadlineHandler.showTasksMenu(chatId, deadline, user);
+                    Long deadlineId = stateService.getState(currentDeadlineIdKey(chatId), Long.class);
+                    if (deadlineId != null && deadlineHandler != null) {
+                        Deadline deadline = botService.getDeadlineRepository().findByIdWithTasks(deadlineId).orElse(null);
+                        if (deadline != null) {
+                            deadlineHandler.showTasksMenu(chatId, deadline, user);
+                        }
                     }
                     return true;
                 default:
@@ -398,15 +446,30 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handleCriteriaSelection(long chatId, String messageText, User user) {
-        Task task = criteriaMenuState.get(chatId);
-        if (task == null) {
-            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            criteriaMenuState.remove(chatId);
-            criteriaActionState.remove(chatId);
+        if (messageText.equals("🏠Главное меню") || messageText.equals("❌ Отменить")) {
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
+            botService.getNavigationHandler().sendMainMenu(chatId, user);
             return;
         }
 
-        String action = criteriaActionState.get(chatId);
+        Long taskId = stateService.getState(criteriaMenuTaskIdKey(chatId), Long.class);
+        if (taskId == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
+            return;
+        }
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+        if (task == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
+            return;
+        }
+
+        String action = stateService.getState(criteriaActionKey(chatId), String.class);
+        if (action == null) action = "";
 
         int totalCount = task.getCompletionCriteria() != null ? task.getCompletionCriteria().split("\n").length : 0;
         int completedCount = 0;
@@ -421,31 +484,26 @@ public class TaskHandler extends BaseHandler {
             return;
         }
 
-        if (messageText.equals("✅ Завершить и принять задачу") && "accept".equals(action)) {
+        if (messageText.contains("Принять задачу") && "accept".equals(action)) {
             if (!allCompleted) {
-                sendTextMessage(chatId, "❌ Не все критерии отмечены! Отмечено " + completedCount + " из " + totalCount + ".\n\nОтметьте все критерии перед принятием задачи.");
-                return;
+                markAllCriteriaCompleted(chatId, task, user);
             }
             acceptTaskWithCriteria(chatId, task, user);
-            criteriaMenuState.remove(chatId);
-            criteriaActionState.remove(chatId);
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
             return;
         }
 
-        if (messageText.equals("🔄 Завершить и отправить на доработку") && "rework".equals(action)) {
-            if (!allCompleted) {
-                sendTextMessage(chatId, "❌ Не все критерии отмечены! Отмечено " + completedCount + " из " + totalCount + ".\n\nОтметьте все критерии перед отправкой на доработку.");
-                return;
-            }
+        if (messageText.contains("Отправить на доработку") && "rework".equals(action)) {
             startReviewComment(chatId, task, user);
-            criteriaMenuState.remove(chatId);
-            criteriaActionState.remove(chatId);
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
             return;
         }
 
         if (messageText.equals("🔙 Назад к задаче")) {
-            criteriaMenuState.remove(chatId);
-            criteriaActionState.remove(chatId);
+            stateService.removeState(criteriaMenuTaskIdKey(chatId));
+            stateService.removeState(criteriaActionKey(chatId));
             showTaskDetails(chatId, task, user);
             return;
         }
@@ -460,39 +518,41 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handlePendingReview(long chatId, String messageText, User student) {
-        Task task = pendingReviewState.get(chatId);
-        if (task == null) {
-            return;
-        }
+        Long taskId = stateService.getState(pendingReviewTaskIdKey(chatId), Long.class);
+        if (taskId == null) return;
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+        if (task == null) return;
+
+        final Task finalTask = task;
 
         switch (messageText) {
             case "💬 Добавить комментарий":
-                pendingCommentState.put(chatId, task);
+                stateService.saveState(pendingCommentTaskIdKey(chatId), finalTask.getId());
                 sendTextMessage(chatId, "Введите комментарий к отправке:");
                 break;
             case "📎 Добавить файл":
-                pendingFileState.put(chatId, task);
+                stateService.saveState(pendingFileTaskIdKey(chatId), finalTask.getId());
                 sendTextMessage(chatId, "📎 Отправьте файл для прикрепления:");
                 break;
             case "✅ Отправить":
-                task.setStatus(Status.WAITING_FOR_REVIEW);
-                botService.getTaskRepository().save(task);
-                sendTextMessage(chatId, "✅ Задача \"" + task.getTitle() + "\" отправлена на проверку!");
+                finalTask.setStatus(Status.WAITING_FOR_REVIEW);
+                botService.getTaskRepository().save(finalTask);
+                sendTextMessage(chatId, "✅ Задача \"" + finalTask.getTitle() + "\" отправлена на проверку!");
 
-                botService.getTelegramService().getChatIdByUser(task.getSupervisor()).ifPresent(supervisorChatId -> {
-                    sendTextMessage(supervisorChatId, "🔔 Студент " + task.getStudent().getFullName() +
-                            " отправил задачу \"" + task.getTitle() + "\" на проверку!");
-                    if (task.getReviewComment() != null && !task.getReviewComment().isEmpty()) {
-                        sendTextMessage(supervisorChatId, "📝 Комментарий студента: " + task.getReviewComment());
+                botService.getTelegramService().getChatIdByUser(finalTask.getSupervisor()).ifPresent(supervisorChatId -> {
+                    sendTextMessage(supervisorChatId, "🔔 Студент " + finalTask.getStudent().getFullName() +
+                            " отправил задачу \"" + finalTask.getTitle() + "\" на проверку!");
+                    if (finalTask.getReviewComment() != null && !finalTask.getReviewComment().isEmpty()) {
+                        sendTextMessage(supervisorChatId, "📝 Комментарий студента: " + finalTask.getReviewComment());
                     }
                 });
 
                 clearPendingReviewState(chatId);
-                showTaskDetails(chatId, task, student);
+                showTaskDetails(chatId, finalTask, student);
                 break;
             case "❌ Отмена":
                 clearPendingReviewState(chatId);
-                showTaskDetails(chatId, task, student);
+                showTaskDetails(chatId, finalTask, student);
                 break;
             default:
                 sendTextMessage(chatId, "Используйте кнопки меню.");
@@ -501,33 +561,48 @@ public class TaskHandler extends BaseHandler {
     }
 
     public void handlePendingComment(long chatId, String text, User student) {
-        Task task = pendingCommentState.get(chatId);
+        Long taskId = stateService.getState(pendingCommentTaskIdKey(chatId), Long.class);
+        if (taskId == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
+            stateService.removeState(pendingCommentTaskIdKey(chatId));
+            return;
+        }
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            pendingCommentState.remove(chatId);
+            stateService.removeState(pendingCommentTaskIdKey(chatId));
             return;
         }
 
-        task.setReviewComment(text);
-        botService.getTaskRepository().save(task);
+        final Task finalTask = task;
+        finalTask.setReviewComment(text);
+        botService.getTaskRepository().save(finalTask);
         sendTextMessage(chatId, "✅ Комментарий добавлен!");
-        pendingCommentState.remove(chatId);
-        showSendForReviewMenu(chatId, task, student);
+        stateService.removeState(pendingCommentTaskIdKey(chatId));
+        showSendForReviewMenu(chatId, finalTask, student);
     }
 
     public void handlePendingFile(long chatId, org.telegram.telegrambots.meta.api.objects.Document document, User student) {
-        Task task = pendingFileState.get(chatId);
-        if (task == null) {
+        Long taskId = stateService.getState(pendingFileTaskIdKey(chatId), Long.class);
+        if (taskId == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            pendingFileState.remove(chatId);
+            stateService.removeState(pendingFileTaskIdKey(chatId));
             return;
         }
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+        if (task == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
+            stateService.removeState(pendingFileTaskIdKey(chatId));
+            return;
+        }
+
+        final Task finalTask = task;
 
         try {
             ObjectMapper mapper = new ObjectMapper();
             List<AttachedFile> files = new ArrayList<>();
-            if (task.getAttachedFiles() != null && !task.getAttachedFiles().isEmpty()) {
-                files = mapper.readValue(task.getAttachedFiles(),
+            if (finalTask.getAttachedFiles() != null && !finalTask.getAttachedFiles().isEmpty()) {
+                files = mapper.readValue(finalTask.getAttachedFiles(),
                         new TypeReference<List<AttachedFile>>() {});
             }
 
@@ -541,12 +616,12 @@ public class TaskHandler extends BaseHandler {
             newFile.setAuthorName(student.getFullName());
 
             files.add(newFile);
-            task.setAttachedFiles(mapper.writeValueAsString(files));
-            botService.getTaskRepository().save(task);
+            finalTask.setAttachedFiles(mapper.writeValueAsString(files));
+            botService.getTaskRepository().save(finalTask);
 
             sendTextMessage(chatId, String.format("✅ Файл \"%s\" прикреплен!", document.getFileName()));
-            pendingFileState.remove(chatId);
-            showSendForReviewMenu(chatId, task, student);
+            stateService.removeState(pendingFileTaskIdKey(chatId));
+            showSendForReviewMenu(chatId, finalTask, student);
 
         } catch (Exception e) {
             log.error("Error saving file: {}", e.getMessage());
@@ -555,7 +630,7 @@ public class TaskHandler extends BaseHandler {
     }
 
     private void showSendForReviewMenu(long chatId, Task task, User student) {
-        pendingReviewState.put(chatId, task);
+        stateService.saveState(pendingReviewTaskIdKey(chatId), task.getId());
         sendMessageWithKeyboard(chatId, "📝 Что хотите сделать?", getPendingReviewKeyboard());
     }
 
@@ -577,8 +652,10 @@ public class TaskHandler extends BaseHandler {
         task.setTitle(state.getTitle());
         task.setDescription(state.getDescription());
         task.setCompletionCriteria(criteriaBuilder.toString());
-        task.setDeadline(state.getDeadline());
-        task.setStudent(state.getDeadline().getStudent());
+        task.setDeadline(botService.getDeadlineRepository().findById(state.getDeadlineId()).orElse(null));
+        if (task.getDeadline() != null) {
+            task.setStudent(task.getDeadline().getStudent());
+        }
 
         Optional<User> supervisorOpt = botService.getTelegramService().getUserByChatId(chatId);
         supervisorOpt.ifPresent(task::setSupervisor);
@@ -586,11 +663,16 @@ public class TaskHandler extends BaseHandler {
         botService.getTaskRepository().save(task);
 
         sendTextMessage(chatId, "✅ Задача создана!");
-        taskCreationStates.remove(chatId);
+        stateService.removeState(taskCreationKey(chatId));
     }
 
     private void completeTaskEdit(long chatId, TaskEditState state) {
-        Task task = state.getTask();
+        Task task = botService.getTaskRepository().findById(state.getTaskId()).orElse(null);
+        if (task == null) {
+            sendTextMessage(chatId, "❌ Задача не найдена.");
+            stateService.removeState(taskEditKey(chatId));
+            return;
+        }
 
         if (state.getCriteriaList() != null && !state.getCriteriaList().isEmpty()) {
             StringBuilder criteriaBuilder = new StringBuilder();
@@ -610,13 +692,13 @@ public class TaskHandler extends BaseHandler {
         Task savedTask = botService.getTaskRepository().save(task);
 
         sendTextMessage(chatId, "✅ Задача обновлена!");
-        taskEditStates.remove(chatId);
-        selectedTaskForAction.put(chatId, savedTask);
+        stateService.removeState(taskEditKey(chatId));
+        stateService.saveState(selectedTaskIdKey(chatId), savedTask.getId());
         showTaskDetails(chatId, savedTask, savedTask.getSupervisor());
     }
 
     private void startReviewComment(long chatId, Task task, User supervisor) {
-        reviewCommentStates.put(chatId, task.getId().toString());
+        stateService.saveState(reviewCommentKey(chatId), task.getId().toString());
         sendTextMessage(chatId, "Введите комментарий о доработке:");
     }
 
@@ -630,14 +712,15 @@ public class TaskHandler extends BaseHandler {
             sendTextMessage(studentChatId, "❌ Задача \"" + task.getTitle() + "\" отменена.");
         });
 
-        selectedTaskForAction.remove(chatId);
+        stateService.removeState(selectedTaskIdKey(chatId));
     }
 
     private void startEdit(long chatId, Task task, User supervisor) {
         TaskEditState state = new TaskEditState();
-        state.setTask(task);
+        state.setTaskId(task.getId());
         state.setStep(0);
-        taskEditStates.put(chatId, state);
+        state.setCriteriaList(new ArrayList<>());
+        stateService.saveState(taskEditKey(chatId), state);
         sendTextMessage(chatId, "Введите новое название задачи:");
     }
 
@@ -648,8 +731,8 @@ public class TaskHandler extends BaseHandler {
     }
 
     private void showCriteriaMenu(long chatId, Task task, User user, String action) {
-        criteriaMenuState.put(chatId, task);
-        criteriaActionState.put(chatId, action);
+        stateService.saveState(criteriaMenuTaskIdKey(chatId), task.getId());
+        stateService.saveState(criteriaActionKey(chatId), action);
 
         StringBuilder message = new StringBuilder();
         message.append("📋 Отметьте выполненные критерии:\n\n");
@@ -698,17 +781,17 @@ public class TaskHandler extends BaseHandler {
         if ("accept".equals(action)) {
             List<String> row2 = new ArrayList<>();
             if (totalCount == 0 || completedCount == totalCount) {
-                row2.add("✅ Завершить и принять задачу");
+                row2.add("✅ Принять задачу");
             } else {
-                row2.add("❌ Завершить и принять задачу (отметьте все критерии)");
+                row2.add("✅ Принять задачу (отметить все критерии)");
             }
             buttons.add(row2);
         } else {
             List<String> row2 = new ArrayList<>();
             if (totalCount == 0 || completedCount == totalCount) {
-                row2.add("🔄 Завершить и отправить на доработку");
+                row2.add("🔄 Отправить на доработку");
             } else {
-                row2.add("❌ Завершить и отправить на доработку (отметьте все критерии)");
+                row2.add("🔄 Отправить на доработку (отметьте все критерии)");
             }
             buttons.add(row2);
         }
@@ -733,10 +816,10 @@ public class TaskHandler extends BaseHandler {
         return createKeyboard(buttons);
     }
 
-    private void clearPendingReviewState(long chatId) {
-        pendingReviewState.remove(chatId);
-        pendingCommentState.remove(chatId);
-        pendingFileState.remove(chatId);
+    public void clearPendingReviewState(long chatId) {
+        stateService.removeState(pendingReviewTaskIdKey(chatId));
+        stateService.removeState(pendingCommentTaskIdKey(chatId));
+        stateService.removeState(pendingFileTaskIdKey(chatId));
     }
 
     private void markCriteriaCompleted(long chatId, Task task, int criterionNumber, User supervisor) {
@@ -772,7 +855,7 @@ public class TaskHandler extends BaseHandler {
         Task savedTask = botService.getTaskRepository().save(task);
 
         sendTextMessage(chatId, "✅ Критерий " + criterionNumber + " отмечен!");
-        selectedTaskForAction.put(chatId, savedTask);
+        stateService.saveState(selectedTaskIdKey(chatId), savedTask.getId());
     }
 
     private void markAllCriteriaCompleted(long chatId, Task task, User supervisor) {
@@ -798,7 +881,7 @@ public class TaskHandler extends BaseHandler {
         Task savedTask = botService.getTaskRepository().save(task);
 
         sendTextMessage(chatId, "✅ Все " + criteria.length + " критериев отмечены как выполненные!");
-        selectedTaskForAction.put(chatId, savedTask);
+        stateService.saveState(selectedTaskIdKey(chatId), savedTask.getId());
     }
 
     private void acceptTaskWithCriteria(long chatId, Task task, User supervisor) {
@@ -806,8 +889,8 @@ public class TaskHandler extends BaseHandler {
         botService.getTaskRepository().save(task);
         sendTextMessage(chatId, "✅ Задача принята!");
 
-        selectedTaskForAction.put(chatId, task);
-        currentDeadlineCache.put(chatId, task.getDeadline());
+        stateService.saveState(selectedTaskIdKey(chatId), task.getId());
+        stateService.saveState(currentDeadlineIdKey(chatId), task.getDeadline().getId());
 
         botService.getTelegramService().getChatIdByUser(task.getStudent()).ifPresent(studentChatId -> {
             sendTextMessage(studentChatId, "🎉 Задача \"" + task.getTitle() + "\" принята руководителем!");
@@ -823,22 +906,9 @@ public class TaskHandler extends BaseHandler {
         return String.format("%.1f MB", size / (1024.0 * 1024.0));
     }
 
-    private static class TaskCreationState {
-        private int step = 0;
-        private String title;
-        private String description;
-        private List<String> completionCriteriaList;
-        private Deadline deadline;
-
-        public int getStep() { return step; }
-        public void setStep(int step) { this.step = step; }
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public List<String> getCompletionCriteriaList() { return completionCriteriaList; }
-        public void setCompletionCriteriaList(List<String> list) { this.completionCriteriaList = list; }
-        public Deadline getDeadline() { return deadline; }
-        public void setDeadline(Deadline deadline) { this.deadline = deadline; }
+    public Task getCurrentTask(long chatId) {
+        Long taskId = stateService.getState(selectedTaskIdKey(chatId), Long.class);
+        if (taskId == null) return null;
+        return botService.getTaskRepository().findById(taskId).orElse(null);
     }
 }

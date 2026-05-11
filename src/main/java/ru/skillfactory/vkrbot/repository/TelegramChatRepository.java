@@ -13,5 +13,4 @@ public interface TelegramChatRepository extends JpaRepository<TelegramChat, Long
     Optional<TelegramChat> findByChatId(Long chatId);
     Optional<TelegramChat> findByUser(User user);
     List<TelegramChat> findAllByUserIsNotNull();
-    void deleteByChatId(Long chatId);
 }

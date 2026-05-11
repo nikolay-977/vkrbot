@@ -2,6 +2,7 @@ package ru.skillfactory.vkrbot.handler;
 
 import ru.skillfactory.vkrbot.model.*;
 import ru.skillfactory.vkrbot.repository.CommentRepository;
+import ru.skillfactory.vkrbot.service.StateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -14,27 +15,37 @@ import java.util.*;
 public class CommentMenuHandler extends BaseHandler {
 
     private final CommentRepository commentRepository;
-    private final Map<Long, Task> commentMenuState = new HashMap<>();
-    private final Map<Long, Task> addCommentState = new HashMap<>();
+    private final StateService stateService;
 
-    public CommentMenuHandler(CommentRepository commentRepository) {
+    public CommentMenuHandler(CommentRepository commentRepository, StateService stateService) {
         this.commentRepository = commentRepository;
+        this.stateService = stateService;
+    }
+
+    private String commentMenuTaskIdKey(long chatId) {
+        return "commentMenuTaskId:" + chatId;
+    }
+
+    private String addCommentTaskIdKey(long chatId) {
+        return "addCommentTaskId:" + chatId;
     }
 
     public boolean isInCommentMenu(long chatId) {
-        return commentMenuState.containsKey(chatId);
+        return stateService.hasState(commentMenuTaskIdKey(chatId));
     }
 
     public boolean isInAddCommentState(long chatId) {
-        return addCommentState.containsKey(chatId);
+        return stateService.hasState(addCommentTaskIdKey(chatId));
     }
 
     public Task getCurrentTask(long chatId) {
-        return commentMenuState.get(chatId);
+        Long taskId = stateService.getState(commentMenuTaskIdKey(chatId), Long.class);
+        if (taskId == null) return null;
+        return botService.getTaskRepository().findById(taskId).orElse(null);
     }
 
     public void showCommentMenu(long chatId, Task task, User user) {
-        commentMenuState.put(chatId, task);
+        stateService.saveState(commentMenuTaskIdKey(chatId), task.getId());
 
         List<Comment> comments = commentRepository.findByTaskOrderByCreatedAtDesc(task);
 
@@ -79,37 +90,62 @@ public class CommentMenuHandler extends BaseHandler {
     }
 
     public void startAddComment(long chatId) {
-        Task task = commentMenuState.get(chatId);
-        if (task != null) {
-            addCommentState.put(chatId, task);
+        Long taskId = stateService.getState(commentMenuTaskIdKey(chatId), Long.class);
+        if (taskId != null) {
+            stateService.saveState(addCommentTaskIdKey(chatId), taskId);
             sendTextMessage(chatId, "Введите текст комментария:");
+        } else {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена. Попробуйте вернуться и открыть комментарии заново.");
         }
     }
 
     public void handleAddCommentText(long chatId, String text, User user) {
-        Task task = addCommentState.get(chatId);
-        if (task == null) {
-            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            addCommentState.remove(chatId);
+        if (text.equals("🏠Главное меню")) {
+            stateService.removeState(addCommentTaskIdKey(chatId));
+            botService.getNavigationHandler().sendMainMenu(chatId, user);
+            return;
+        }
+        if (text.equals("🔙 Назад к задаче")) {
+            stateService.removeState(addCommentTaskIdKey(chatId));
+            Long taskId = stateService.getState(commentMenuTaskIdKey(chatId), Long.class);
+            if (taskId != null) {
+                Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+                if (task != null) {
+                    showCommentMenu(chatId, task, user);
+                    return;
+                }
+            }
+            botService.getNavigationHandler().sendMainMenu(chatId, user);
             return;
         }
 
+        Long taskId = stateService.getState(addCommentTaskIdKey(chatId), Long.class);
+        if (taskId == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена. Возможно, сессия истекла.");
+            stateService.removeState(addCommentTaskIdKey(chatId));
+            return;
+        }
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
+        if (task == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
+            stateService.removeState(addCommentTaskIdKey(chatId));
+            return;
+        }
         Comment comment = new Comment();
         comment.setText(text);
         comment.setTask(task);
         comment.setAuthor(user);
         commentRepository.save(comment);
-
         sendTextMessage(chatId, "✅ Комментарий добавлен!");
-        addCommentState.remove(chatId);
+        stateService.removeState(addCommentTaskIdKey(chatId));
         showCommentMenu(chatId, task, user);
     }
 
     public void handleDeleteComment(long chatId, int commentNumber, User user) {
-        Task task = commentMenuState.get(chatId);
+        Task task = getCurrentTask(chatId);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            commentMenuState.remove(chatId);
+            stateService.removeState(commentMenuTaskIdKey(chatId));
             return;
         }
 
@@ -132,7 +168,7 @@ public class CommentMenuHandler extends BaseHandler {
     }
 
     public void exitToTask(long chatId) {
-        commentMenuState.remove(chatId);
-        addCommentState.remove(chatId);
+        stateService.removeState(commentMenuTaskIdKey(chatId));
+        stateService.removeState(addCommentTaskIdKey(chatId));
     }
 }

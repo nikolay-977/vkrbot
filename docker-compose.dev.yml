@@ -16,22 +16,11 @@ services:
     networks:
       - admin-network-dev
 
-  adminer:
-    image: adminer:latest
-    container_name: admin-app-adminer-dev
+  redis:
+    image: redis:7-alpine
+    container_name: admin-app-redis-dev
     ports:
-      - "8081:8080"
-    depends_on:
-      - postgres
-    networks:
-      - admin-network-dev
-
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: admin-app-mailhog-dev
-    ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
+      - "6379:6379"
     networks:
       - admin-network-dev
 

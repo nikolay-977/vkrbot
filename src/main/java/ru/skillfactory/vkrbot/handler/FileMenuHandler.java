@@ -6,6 +6,7 @@ import org.telegram.telegrambots.meta.api.objects.Document;
 import ru.skillfactory.vkrbot.dto.AttachedFile;
 import ru.skillfactory.vkrbot.model.*;
 import ru.skillfactory.vkrbot.repository.CommentRepository;
+import ru.skillfactory.vkrbot.service.StateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendDocument;
@@ -22,32 +23,45 @@ public class FileMenuHandler extends BaseHandler {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final CommentRepository commentRepository;
-    private final Map<Long, Task> fileMenuState = new HashMap<>();
-    private final Map<Long, Task> fileUploadState = new HashMap<>();
-    private final Map<Long, Integer> deleteFileState = new HashMap<>();
+    private final StateService stateService;
 
-    public FileMenuHandler(CommentRepository commentRepository) {
+    public FileMenuHandler(CommentRepository commentRepository, StateService stateService) {
         this.commentRepository = commentRepository;
+        this.stateService = stateService;
+    }
+
+    private String fileMenuTaskIdKey(long chatId) {
+        return "fileMenuTaskId:" + chatId;
+    }
+
+    private String fileUploadTaskIdKey(long chatId) {
+        return "fileUploadTaskId:" + chatId;
+    }
+
+    private String deleteFileKey(long chatId) {
+        return "deleteFile:" + chatId;
     }
 
     public boolean isInFileMenu(long chatId) {
-        return fileMenuState.containsKey(chatId);
+        return stateService.hasState(fileMenuTaskIdKey(chatId));
     }
 
     public boolean isInFileUploadState(long chatId) {
-        return fileUploadState.containsKey(chatId);
+        return stateService.hasState(fileUploadTaskIdKey(chatId));
     }
 
     public boolean isInDeleteFileState(long chatId) {
-        return deleteFileState.containsKey(chatId);
+        return stateService.hasState(deleteFileKey(chatId));
     }
 
     public Task getCurrentTask(long chatId) {
-        return fileMenuState.get(chatId);
+        Long taskId = stateService.getState(fileMenuTaskIdKey(chatId), Long.class);
+        if (taskId == null) return null;
+        return botService.getTaskRepository().findById(taskId).orElse(null);
     }
 
     public void showFileMenu(long chatId, Task task, User user) {
-        fileMenuState.put(chatId, task);
+        stateService.saveState(fileMenuTaskIdKey(chatId), task.getId());
 
         StringBuilder message = new StringBuilder();
         message.append("📎 Файлы, прикрепленные к задаче:\n\n");
@@ -95,15 +109,22 @@ public class FileMenuHandler extends BaseHandler {
     }
 
     public void startFileUpload(long chatId, Task task) {
-        fileUploadState.put(chatId, task);
+        stateService.saveState(fileUploadTaskIdKey(chatId), task.getId());
         sendTextMessage(chatId, "📎 Отправьте файл, который хотите прикрепить к задаче.\n\nПоддерживаются любые форматы.");
     }
 
     public void handleFileUpload(long chatId, Document document, User user) {
-        Task task = fileUploadState.get(chatId);
+        Long taskId = stateService.getState(fileUploadTaskIdKey(chatId), Long.class);
+        if (taskId == null) {
+            sendTextMessage(chatId, "❌ Ошибка: задача не найдена. Возможно, сессия истекла.");
+            stateService.removeState(fileUploadTaskIdKey(chatId));
+            return;
+        }
+
+        Task task = botService.getTaskRepository().findById(taskId).orElse(null);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            fileUploadState.remove(chatId);
+            stateService.removeState(fileUploadTaskIdKey(chatId));
             return;
         }
 
@@ -139,20 +160,19 @@ public class FileMenuHandler extends BaseHandler {
             commentRepository.save(comment);
 
             sendTextMessage(chatId, String.format("✅ Файл \"%s\" успешно прикреплен!", document.getFileName()));
-            fileUploadState.remove(chatId);
-
-            fileMenuState.put(chatId, savedTask);
+            stateService.removeState(fileUploadTaskIdKey(chatId));
+            stateService.saveState(fileMenuTaskIdKey(chatId), savedTask.getId());
             showFileMenu(chatId, savedTask, user);
 
         } catch (Exception e) {
             log.error("Error saving file: {}", e.getMessage(), e);
             sendTextMessage(chatId, "❌ Ошибка при сохранении файла: " + e.getMessage());
-            fileUploadState.remove(chatId);
+            stateService.removeState(fileUploadTaskIdKey(chatId));
         }
     }
 
     public void handleDownloadFile(long chatId, int fileNumber, User user) {
-        Task task = fileMenuState.get(chatId);
+        Task task = getCurrentTask(chatId);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
             return;
@@ -184,22 +204,22 @@ public class FileMenuHandler extends BaseHandler {
 
     public void startDeleteFile(long chatId, int fileNumber) {
         log.info("startDeleteFile called for chat {}, fileNumber {}", chatId, fileNumber);
-        deleteFileState.put(chatId, fileNumber);
+        stateService.saveState(deleteFileKey(chatId), fileNumber);
         sendTextMessage(chatId, String.format("⚠️ Вы уверены, что хотите удалить файл №%d?\n\nОтправьте 'ДА' для подтверждения или 'НЕТ' для отмены.", fileNumber));
     }
 
     public void confirmDeleteFile(long chatId, String confirm, User user) {
-        Integer fileNumber = deleteFileState.get(chatId);
+        Integer fileNumber = stateService.getState(deleteFileKey(chatId), Integer.class);
         if (fileNumber == null) {
             sendTextMessage(chatId, "❌ Операция удаления не найдена.");
-            deleteFileState.remove(chatId);
+            stateService.removeState(deleteFileKey(chatId));
             return;
         }
 
         if (confirm.equalsIgnoreCase("НЕТ")) {
             sendTextMessage(chatId, "❌ Удаление отменено.");
-            deleteFileState.remove(chatId);
-            Task task = fileMenuState.get(chatId);
+            stateService.removeState(deleteFileKey(chatId));
+            Task task = getCurrentTask(chatId);
             if (task != null) {
                 showFileMenu(chatId, task, user);
             }
@@ -211,10 +231,10 @@ public class FileMenuHandler extends BaseHandler {
             return;
         }
 
-        Task task = fileMenuState.get(chatId);
+        Task task = getCurrentTask(chatId);
         if (task == null) {
             sendTextMessage(chatId, "❌ Ошибка: задача не найдена.");
-            deleteFileState.remove(chatId);
+            stateService.removeState(deleteFileKey(chatId));
             return;
         }
 
@@ -222,7 +242,7 @@ public class FileMenuHandler extends BaseHandler {
 
         if (task.getAttachedFiles() == null || task.getAttachedFiles().isEmpty()) {
             sendTextMessage(chatId, "❌ Файлы не найдены.");
-            deleteFileState.remove(chatId);
+            stateService.removeState(deleteFileKey(chatId));
             showFileMenu(chatId, task, user);
             return;
         }
@@ -233,7 +253,7 @@ public class FileMenuHandler extends BaseHandler {
 
             if (fileNumber < 1 || fileNumber > files.size()) {
                 sendTextMessage(chatId, "❌ Неверный номер файла.");
-                deleteFileState.remove(chatId);
+                stateService.removeState(deleteFileKey(chatId));
                 return;
             }
 
@@ -245,7 +265,7 @@ public class FileMenuHandler extends BaseHandler {
             if (user.getRole() != Role.SUPERVISOR) {
                 if (file.getAuthorId() == null || !file.getAuthorId().equals(user.getId())) {
                     sendTextMessage(chatId, "❌ Вы можете удалять только свои файлы.");
-                    deleteFileState.remove(chatId);
+                    stateService.removeState(deleteFileKey(chatId));
                     return;
                 }
             }
@@ -268,15 +288,14 @@ public class FileMenuHandler extends BaseHandler {
             commentRepository.save(comment);
 
             sendTextMessage(chatId, String.format("✅ Файл \"%s\" удален!", file.getFileName()));
-            deleteFileState.remove(chatId);
-
-            fileMenuState.put(chatId, savedTask);
+            stateService.removeState(deleteFileKey(chatId));
+            stateService.saveState(fileMenuTaskIdKey(chatId), savedTask.getId());
             showFileMenu(chatId, savedTask, user);
 
         } catch (Exception e) {
             log.error("Error deleting file: {}", e.getMessage(), e);
             sendTextMessage(chatId, "❌ Ошибка при удалении файла: " + e.getMessage());
-            deleteFileState.remove(chatId);
+            stateService.removeState(deleteFileKey(chatId));
         }
     }
 
@@ -288,8 +307,8 @@ public class FileMenuHandler extends BaseHandler {
     }
 
     public void exitToTask(long chatId) {
-        fileMenuState.remove(chatId);
-        fileUploadState.remove(chatId);
-        deleteFileState.remove(chatId);
+        stateService.removeState(fileMenuTaskIdKey(chatId));
+        stateService.removeState(fileUploadTaskIdKey(chatId));
+        stateService.removeState(deleteFileKey(chatId));
     }
 }

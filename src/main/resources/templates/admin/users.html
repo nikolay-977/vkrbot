@@ -293,7 +293,7 @@
                             <label class="form-label">Роль</label>
                             <select class="form-select" th:field="*{role}">
                                 <option value="">Все роли</option>
-                                <option th:each="role : ${T(com.admin.app.model.Role).values()}"
+                                <option th:each="role : ${T(ru.skillfactory.vkrbot.model.Role).values()}"
                                         th:value="${role}" th:text="${role}"></option>
                             </select>
                         </div>

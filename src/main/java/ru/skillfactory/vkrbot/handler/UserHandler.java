@@ -4,6 +4,9 @@ import ru.skillfactory.vkrbot.model.Role;
 import ru.skillfactory.vkrbot.model.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.Optional;
 
@@ -26,14 +29,12 @@ public class UserHandler extends BaseHandler {
         String token = messageText.trim();
         try {
             Optional<User> userOpt = botService.getUserRepository().findByToken(token);
-
             if (userOpt.isEmpty()) {
-                sendTextMessage(chatId, "❌ Неверный токен.");
+                sendAuthInstruction(chatId);
                 return;
             }
 
             User user = userOpt.get();
-
             if (!user.isEnabled()) {
                 sendTextMessage(chatId, "❌ Ваш аккаунт заблокирован.");
                 return;
@@ -54,7 +55,41 @@ public class UserHandler extends BaseHandler {
             }
         } catch (Exception e) {
             log.error("Error validating token for chat {}: {}", chatId, e.getMessage());
-            sendTextMessage(chatId, "❌ Ошибка при проверке токена.");
+            sendAuthInstruction(chatId);
+        }
+    }
+
+    private void sendAuthInstruction(long chatId) {
+        String instruction = "❌ Вы не авторизованы.\n\n" +
+                "Пожалуйста, введите токен, который был отправлен на ваш email.\n" +
+                "Если вы не получили токен, обратитесь к администратору.\n" +
+                "Для повторного получения инструкции введите /start.";
+
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText(instruction);
+        ReplyKeyboardRemove removeKeyboard = new ReplyKeyboardRemove();
+        removeKeyboard.setRemoveKeyboard(true);
+        message.setReplyMarkup(removeKeyboard);
+        try {
+            botService.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Error sending auth instruction", e);
+        }
+    }
+
+    public void logout(long chatId, User user) {
+        botService.getTelegramService().disconnectChat(chatId);
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText("👋 Вы вышли из системы.\n\nДля повторной авторизации введите ваш токен или /start.");
+        ReplyKeyboardRemove removeKeyboard = new ReplyKeyboardRemove();
+        removeKeyboard.setRemoveKeyboard(true);
+        message.setReplyMarkup(removeKeyboard);
+        try {
+            botService.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Error sending logout message", e);
         }
     }
 
@@ -75,14 +110,7 @@ public class UserHandler extends BaseHandler {
                 maskToken(user.getToken()),
                 user.isEnabled() ? "🟢 Активен" : "🔴 Заблокирован"
         );
-
         sendTextMessage(chatId, message);
-    }
-
-    public void logout(long chatId, User user) {
-        botService.getUserStates().clear();
-        botService.getTelegramService().disconnectChat(chatId);
-        sendTextMessage(chatId, "👋 Вы вышли из системы.");
     }
 
     private String getRoleDisplayName(Role role) {

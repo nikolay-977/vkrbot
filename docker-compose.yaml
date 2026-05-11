@@ -53,30 +53,13 @@ services:
       - admin-network
     restart: unless-stopped
 
-  # Adminer - веб-интерфейс для управления БД (опционально)
-  adminer:
-    image: adminer:latest
-    container_name: admin-app-adminer
-    ports:
-      - "8081:8080"
-    depends_on:
-      - postgres
-    networks:
-      - admin-network
-    restart: unless-stopped
-
-  # Redis для кэширования (опционально)
   redis:
     image: redis:7-alpine
-    container_name: admin-app-redis
+    container_name: admin-app-redis-dev
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     networks:
-      - admin-network
-    restart: unless-stopped
-    command: redis-server --appendonly yes
+      - admin-network-dev
 
 networks:
   admin-network:
