@@ -1,5 +1,5 @@
-# Этап сборки
-FROM maven:3.8.4-openjdk-17-slim AS build
+# Этап сборки (Maven + Corretto 17)
+FROM maven:3.8.4-amazoncorretto-17 AS build
 WORKDIR /app
 
 # Копируем файлы проекта
@@ -9,15 +9,16 @@ COPY src ./src
 # Собираем приложение
 RUN mvn clean package -DskipTests
 
-# Этап запуска
-FROM openjdk:17-slim
+# Этап запуска (только Corretto 17, slim version via Alpine)
+FROM amazoncorretto:17-alpine
 WORKDIR /app
 
 # Копируем собранный jar из этапа сборки
 COPY --from=build /app/target/*.jar app.jar
 
 # Создаем пользователя для безопасности
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup -u 1000 && \
+    chown -R appuser:appgroup /app
 USER appuser
 
 # Порт приложения
