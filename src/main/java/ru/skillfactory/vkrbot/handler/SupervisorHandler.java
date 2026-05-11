@@ -31,6 +31,9 @@ public class SupervisorHandler extends BaseHandler {
 
     public void showStudentsList(long chatId, User supervisor) {
         log.info("=== SHOW STUDENTS LIST ===");
+        deadlineHandler.clearSelectedDeadline(chatId);
+        stateService.removeState(selectedStudentIdKey(chatId));
+
         List<User> students = botService.getUserRepository().findBySupervisor(supervisor);
 
         if (students.isEmpty()) {
@@ -88,57 +91,30 @@ public class SupervisorHandler extends BaseHandler {
     }
 
     public boolean handleStudentChoice(long chatId, String messageText, User user) {
-        if (stateService.hasState(selectedStudentIdKey(chatId))) {
-            if (messageText.equals("🔙 Назад к студентам")) {
-                stateService.removeState(selectedStudentIdKey(chatId));
-                deadlineHandler.clearSelectedDeadline(chatId);
-                showStudentsList(chatId, user);
-                return true;
-            }
+        if (!stateService.hasState(selectedStudentIdKey(chatId))) {
+            return false;
+        }
 
-            if (messageText.equals("➕ Добавить дедлайн")) {
-                Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
-                if (studentId != null) {
-                    User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
-                    if (selectedStudent != null) {
-                        deadlineHandler.startCreation(chatId, selectedStudent, user);
-                    }
+        if (messageText.equals("🔙 Назад к студентам")) {
+            stateService.removeState(selectedStudentIdKey(chatId));
+            deadlineHandler.clearSelectedDeadline(chatId);
+            showStudentsList(chatId, user);
+            return true;
+        }
+
+        if (messageText.equals("➕ Добавить дедлайн")) {
+            Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
+            if (studentId != null) {
+                User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
+                if (selectedStudent != null) {
+                    deadlineHandler.startCreation(chatId, selectedStudent, user);
                 }
-                return true;
             }
+            return true;
+        }
 
-            if (messageText.equals("🔙 Назад к дедлайнам")) {
-                deadlineHandler.clearSelectedDeadline(chatId);
-                Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
-                if (studentId != null) {
-                    User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
-                    if (selectedStudent != null) {
-                        sendStudentTasksMenu(chatId, selectedStudent, user);
-                    }
-                }
-                return true;
-            }
-
-            try {
-                int deadlineNumber = Integer.parseInt(messageText) - 1;
-                Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
-                if (studentId != null) {
-                    User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
-                    if (selectedStudent != null) {
-                        List<Deadline> deadlines = botService.getDeadlineRepository()
-                                .findByStudentAndSupervisorWithTasks(selectedStudent, user);
-                        if (deadlineNumber >= 0 && deadlineNumber < deadlines.size()) {
-                            deadlineHandler.showTasksMenu(chatId, deadlines.get(deadlineNumber), user);
-                        } else {
-                            botService.getNavigationHandler().sendTextMessage(chatId, "❌ Неверный номер дедлайна.");
-                        }
-                        return true;
-                    }
-                }
-            } catch (NumberFormatException e) {
-
-            }
-
+        if (messageText.equals("🔙 Назад к дедлайнам")) {
+            deadlineHandler.clearSelectedDeadline(chatId);
             Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
             if (studentId != null) {
                 User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
@@ -148,11 +124,35 @@ public class SupervisorHandler extends BaseHandler {
             }
             return true;
         }
+
+        if (messageText.equals("🏠Главное меню")) {
+            return false;
+        }
+
+        try {
+            int deadlineNumber = Integer.parseInt(messageText) - 1;
+            Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
+            if (studentId != null) {
+                User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);
+                if (selectedStudent != null) {
+                    List<Deadline> deadlines = botService.getDeadlineRepository()
+                            .findByStudentAndSupervisorWithTasks(selectedStudent, user);
+                    if (deadlineNumber >= 0 && deadlineNumber < deadlines.size()) {
+                        deadlineHandler.showTasksMenu(chatId, deadlines.get(deadlineNumber), user);
+                        return true;
+                    } else {
+                        botService.getNavigationHandler().sendTextMessage(chatId, "❌ Неверный номер дедлайна.");
+                        return true;
+                    }
+                }
+            }
+        } catch (NumberFormatException e) {
+        }
+
         return false;
     }
 
     private void sendStudentTasksMenu(long chatId, User student, User supervisor) {
-        // Очищаем предыдущий выбранный дедлайн
         deadlineHandler.clearSelectedDeadline(chatId);
 
         List<Deadline> deadlines = botService.getDeadlineRepository()

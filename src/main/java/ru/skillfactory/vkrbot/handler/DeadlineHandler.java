@@ -44,6 +44,10 @@ public class DeadlineHandler extends BaseHandler {
     }
 
     public boolean handleDeadlineAction(long chatId, String messageText, User user) {
+        if (messageText.equals("🏠Главное меню") || messageText.equals("🔙 Назад к дедлайнам")) {
+            return false;
+        }
+
         Long deadlineId = stateService.getState(selectedDeadlineIdKey(chatId), Long.class);
         if (deadlineId == null) return false;
 
@@ -59,25 +63,34 @@ public class DeadlineHandler extends BaseHandler {
             return true;
         }
 
+        boolean isNumber;
+        try {
+            Integer.parseInt(messageText);
+            isNumber = true;
+        } catch (NumberFormatException e) {
+            isNumber = false;
+        }
+
         if (deadline.getTasks().isEmpty()) {
-            sendTextMessage(chatId, "❌ В этом дедлайне пока нет задач. Добавьте задачу с помощью кнопки выше.");
+            if (isNumber) {
+                sendTextMessage(chatId, "❌ В этом дедлайне пока нет задач. Добавьте задачу с помощью кнопки выше.");
+            }
             return true;
         }
 
-        try {
+        if (isNumber) {
             int taskNumber = Integer.parseInt(messageText) - 1;
             if (taskNumber >= 0 && taskNumber < deadline.getTasks().size()) {
                 Task selectedTask = deadline.getTasks().get(taskNumber);
-                // Не удаляем selectedDeadlineIdKey, чтобы можно было вернуться
                 taskHandler.showForAction(chatId, selectedTask, user);
                 return true;
             } else {
                 sendTextMessage(chatId, "❌ Неверный номер задачи. Введите число от 1 до " + deadline.getTasks().size());
                 return true;
             }
-        } catch (NumberFormatException e) {
-            return false;
         }
+
+        return false;
     }
 
     public void handleCreation(long chatId, String messageText) {
@@ -122,7 +135,6 @@ public class DeadlineHandler extends BaseHandler {
                     Optional<User> supervisorOpt = botService.getTelegramService().getUserByChatId(chatId);
                     supervisorOpt.ifPresent(deadline::setSupervisor);
                     Deadline savedDeadline = botService.getDeadlineRepository().save(deadline);
-                    // Сохраняем ID, а не объект
                     stateService.saveState(selectedDeadlineIdKey(chatId), savedDeadline.getId());
                     sendTextMessage(chatId, "✅ Дедлайн успешно создан!");
                     stateService.removeState(creationKey(chatId));

@@ -12,7 +12,7 @@ public class TaskCreationState implements Serializable {
     private String title;
     private String description;
     private List<String> completionCriteriaList;
-    private Long deadlineId;  // вместо Deadline
+    private Long deadlineId;
 
     public int getStep() {
         return step;

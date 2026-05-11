@@ -17,8 +17,6 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.objects.Update;
 
 import jakarta.annotation.PostConstruct;
-import java.util.HashMap;
-import java.util.Map;
 
 @Service
 @Slf4j
@@ -31,9 +29,6 @@ public class TelegramBotService extends TelegramLongPollingBot {
     private final TelegramService telegramService;
     private final DeadlineRepository deadlineRepository;
     private final TaskRepository taskRepository;
-
-    public final Map<Long, Object> userStates = new HashMap<>();
-
     private final NavigationHandler navigationHandler;
     private final UserHandler userHandler;
     private final NotificationHandler notificationHandler;
@@ -43,6 +38,7 @@ public class TelegramBotService extends TelegramLongPollingBot {
     private final TaskHandler taskHandler;
     private final SupervisorHandler supervisorHandler;
     private final StudentHandler studentHandler;
+    private final StateService stateService;
 
     @Value("${telegram.bot.token:}")
     private String botToken;
@@ -207,13 +203,9 @@ public class TelegramBotService extends TelegramLongPollingBot {
             userHandler.logout(chatId, user);
             return;
         }
-        // 1. Сначала действия с задачами (если есть выбранная задача)
         if (taskHandler.handleTaskAction(chatId, messageText, user)) return;
-        // 2. Затем действия с дедлайнами (выбор задачи из дедлайна)
         if (deadlineHandler.handleDeadlineAction(chatId, messageText, user)) return;
-        // 3. Затем выбор студента из списка (ввод цифры)
         if (supervisorHandler.handleStudentSelection(chatId, messageText, user)) return;
-        // 4. Затем навигация супервайзера (кнопки "Назад", "Добавить дедлайн", выбор дедлайна)
         if (supervisorHandler.handleStudentChoice(chatId, messageText, user)) return;
         if (navigationHandler.handleNavigation(chatId, messageText, user)) return;
         navigationHandler.sendMainMenu(chatId, user);
@@ -268,11 +260,39 @@ public class TelegramBotService extends TelegramLongPollingBot {
             fileMenuHandler.confirmDeleteFile(chatId, messageText, user);
             return true;
         }
+
         if (deadlineHandler.isInCreationState(chatId)) {
             deadlineHandler.handleCreation(chatId, messageText);
             return true;
         }
+
         if (taskHandler.isInCriteriaMenu(chatId)) {
+            if (messageText.equals("🏠Главное меню")) {
+                stateService.removeState("criteriaMenuTaskId:" + chatId);
+                stateService.removeState("criteriaAction:" + chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                } else {
+                    navigationHandler.sendTextMessage(chatId, "❌ Ошибка: пользователь не найден.");
+                }
+                return true;
+            }
+            if (messageText.equals("🔙 Назад к задаче")) {
+                Long taskId = stateService.getState("selectedTaskId:" + chatId, Long.class);
+                stateService.removeState("criteriaMenuTaskId:" + chatId);
+                stateService.removeState("criteriaAction:" + chatId);
+                if (taskId != null && user != null) {
+                    Task task = taskRepository.findById(taskId).orElse(null);
+                    if (task != null) {
+                        taskHandler.showTaskDetails(chatId, task, user);
+                        return true;
+                    }
+                }
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
             if (user != null) {
                 taskHandler.handleCriteriaSelection(chatId, messageText, user);
             } else {
@@ -280,19 +300,42 @@ public class TelegramBotService extends TelegramLongPollingBot {
             }
             return true;
         }
+
         if (taskHandler.isInCreationState(chatId)) {
             taskHandler.handleCreation(chatId, messageText);
             return true;
         }
+
         if (taskHandler.isInEditState(chatId)) {
             taskHandler.handleEdit(chatId, messageText);
             return true;
         }
+
         if (taskHandler.isInReviewCommentState(chatId)) {
             taskHandler.handleReviewComment(chatId, messageText);
             return true;
         }
+
         if (taskHandler.isInPendingReviewState(chatId)) {
+            if (messageText.equals("🏠Главное меню") || messageText.equals("❌ Отмена")) {
+                taskHandler.clearPendingReviewState(chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
+            if (messageText.equals("🔙 Назад к задаче")) {
+                taskHandler.clearPendingReviewState(chatId);
+                if (user != null) {
+                    Task task = taskHandler.getCurrentTask(chatId);
+                    if (task != null) {
+                        taskHandler.showTaskDetails(chatId, task, user);
+                    } else {
+                        navigationHandler.sendMainMenu(chatId, user);
+                    }
+                }
+                return true;
+            }
             if (user != null) {
                 taskHandler.handlePendingReview(chatId, messageText, user);
             } else {
@@ -300,14 +343,36 @@ public class TelegramBotService extends TelegramLongPollingBot {
             }
             return true;
         }
+
         if (taskHandler.isInPendingCommentState(chatId)) {
+            if (messageText.equals("🏠Главное меню") || messageText.equals("❌ Отмена")) {
+                taskHandler.clearPendingReviewState(chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
             if (user != null) {
                 taskHandler.handlePendingComment(chatId, messageText, user);
             } else {
                 navigationHandler.sendTextMessage(chatId, "❌ Ошибка: пользователь не найден.");
+                taskHandler.clearPendingReviewState(chatId);
             }
             return true;
         }
+
+        if (taskHandler.isInPendingFileState(chatId)) {
+            if (messageText.equals("🏠Главное меню") || messageText.equals("❌ Отмена")) {
+                taskHandler.clearPendingReviewState(chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
+            navigationHandler.sendTextMessage(chatId, "📎 Пожалуйста, отправьте файл, или нажмите ❌ Отмена для выхода.");
+            return true;
+        }
+
         if (taskHandler.isInTaskView(chatId)) {
             if (user != null) {
                 if (taskHandler.handleTaskAction(chatId, messageText, user)) {
@@ -315,30 +380,79 @@ public class TelegramBotService extends TelegramLongPollingBot {
                 }
             }
         }
+
         if (commentMenuHandler.isInCommentMenu(chatId)) {
             handleCommentMenu(chatId, messageText, user);
             return true;
         }
+
         if (fileMenuHandler.isInFileMenu(chatId)) {
             handleFileMenu(chatId, messageText, user);
             return true;
         }
+
         if (commentMenuHandler.isInAddCommentState(chatId)) {
+            if (messageText.equals("🏠Главное меню")) {
+                commentMenuHandler.exitToTask(chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
+            if (messageText.equals("🔙 Назад к задаче")) {
+                commentMenuHandler.exitToTask(chatId);
+                if (user != null) {
+                    Task task = commentMenuHandler.getCurrentTask(chatId);
+                    if (task != null) {
+                        commentMenuHandler.showCommentMenu(chatId, task, user);
+                    } else {
+                        navigationHandler.sendMainMenu(chatId, user);
+                    }
+                }
+                return true;
+            }
             if (user != null) {
                 commentMenuHandler.handleAddCommentText(chatId, messageText, user);
             } else {
                 navigationHandler.sendTextMessage(chatId, "❌ Ошибка: пользователь не найден.");
+                commentMenuHandler.exitToTask(chatId);
             }
             return true;
         }
+
         if (fileMenuHandler.isInFileUploadState(chatId)) {
-            navigationHandler.sendTextMessage(chatId, "📎 Пожалуйста, отправьте файл.");
+            if (messageText.equals("🏠Главное меню")) {
+                fileMenuHandler.exitToTask(chatId);
+                if (user != null) {
+                    navigationHandler.sendMainMenu(chatId, user);
+                }
+                return true;
+            }
+            if (messageText.equals("🔙 Назад к задаче")) {
+                fileMenuHandler.exitToTask(chatId);
+                if (user != null) {
+                    Task task = fileMenuHandler.getCurrentTask(chatId);
+                    if (task != null) {
+                        taskHandler.showTaskDetails(chatId, task, user);
+                    } else {
+                        navigationHandler.sendMainMenu(chatId, user);
+                    }
+                }
+                return true;
+            }
+            navigationHandler.sendTextMessage(chatId, "📎 Пожалуйста, отправьте файл, или используйте команды меню.");
             return true;
         }
+
         return false;
     }
 
     private void handleCommentMenu(long chatId, String messageText, User user) {
+        if (messageText.equals("🏠Главное меню")) {
+            commentMenuHandler.exitToTask(chatId);
+            navigationHandler.sendMainMenu(chatId, user);
+            return;
+        }
         if (messageText.equals("➕ Добавить комментарий")) {
             commentMenuHandler.startAddComment(chatId);
         } else if (messageText.equals("🔙 Назад к задаче")) {
@@ -362,6 +476,11 @@ public class TelegramBotService extends TelegramLongPollingBot {
     }
 
     private void handleFileMenu(long chatId, String messageText, User user) {
+        if (messageText.equals("🏠Главное меню")) {
+            fileMenuHandler.exitToTask(chatId);
+            navigationHandler.sendMainMenu(chatId, user);
+            return;
+        }
         if (messageText.equals("📎 Добавить файл")) {
             Task task = fileMenuHandler.getCurrentTask(chatId);
             fileMenuHandler.startFileUpload(chatId, task);

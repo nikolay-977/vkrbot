@@ -15,7 +15,6 @@ public class StateService {
         this.redisTemplate = redisTemplate;
     }
 
-    // Сохранить состояние с TTL (по умолчанию 30 минут)
     public void saveState(String key, Object state) {
         saveState(key, state, 30, TimeUnit.MINUTES);
     }
@@ -24,7 +23,6 @@ public class StateService {
         redisTemplate.opsForValue().set(key, state, timeout, unit);
     }
 
-    // Получить состояние
     @SuppressWarnings("unchecked")
     public <T> T getState(String key, Class<T> type) {
         Object value = redisTemplate.opsForValue().get(key);
@@ -35,12 +33,10 @@ public class StateService {
         return null;
     }
 
-    // Удалить состояние
     public void removeState(String key) {
         redisTemplate.delete(key);
     }
 
-    // Проверить наличие
     public boolean hasState(String key) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(key));
     }

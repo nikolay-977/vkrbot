@@ -78,7 +78,6 @@ public class StudentHandler extends BaseHandler {
     }
 
     public void showStudentDeadlines(long chatId, User student) {
-        // Получаем дедлайны, отсортированные по дате (как у преподавателя)
         List<Deadline> deadlines = deadlineRepository.findByStudentOrderByDeadlineDateAsc(student);
         List<Long> deadlineIds = deadlines.stream().map(Deadline::getId).collect(Collectors.toList());
         stateService.saveState(deadlinesIdsKey(chatId), deadlineIds);
@@ -97,7 +96,6 @@ public class StudentHandler extends BaseHandler {
 
         for (int i = 0; i < deadlines.size(); i++) {
             Deadline deadline = deadlines.get(i);
-            // Загружаем задачи для этого дедлайна
             List<Task> tasks = taskRepository.findByDeadline(deadline);
             message.append(String.format("%d. %s\n", i + 1, deadline.getTitle()));
             message.append(String.format("   ⏰ Дедлайн: %s\n",

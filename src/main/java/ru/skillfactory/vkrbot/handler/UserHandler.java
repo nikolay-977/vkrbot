@@ -26,13 +26,10 @@ public class UserHandler extends BaseHandler {
             return;
         }
 
-        // Любое другое сообщение рассматриваем как попытку ввести токен
-        // но лучше выдать понятную инструкцию
         String token = messageText.trim();
         try {
             Optional<User> userOpt = botService.getUserRepository().findByToken(token);
             if (userOpt.isEmpty()) {
-                // Токен неверный – показываем инструкцию и удаляем клавиатуру
                 sendAuthInstruction(chatId);
                 return;
             }
@@ -72,7 +69,7 @@ public class UserHandler extends BaseHandler {
         message.setChatId(chatId);
         message.setText(instruction);
         ReplyKeyboardRemove removeKeyboard = new ReplyKeyboardRemove();
-        removeKeyboard.setRemoveKeyboard(true);   // <-- обязательно установить true
+        removeKeyboard.setRemoveKeyboard(true);
         message.setReplyMarkup(removeKeyboard);
         try {
             botService.execute(message);
@@ -82,8 +79,6 @@ public class UserHandler extends BaseHandler {
     }
 
     public void logout(long chatId, User user) {
-        // Удаляем состояния (если нужно), но лучше убрать вызов userStates
-        // botService.getUserStates().clear(); // можно удалить
         botService.getTelegramService().disconnectChat(chatId);
         SendMessage message = new SendMessage();
         message.setChatId(chatId);
@@ -97,6 +92,7 @@ public class UserHandler extends BaseHandler {
             log.error("Error sending logout message", e);
         }
     }
+
     public void showUserInfo(long chatId, User user) {
         String message = String.format(
                 "ℹ️ Ваши данные:\n\n" +
