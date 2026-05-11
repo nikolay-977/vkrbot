@@ -1,8 +1,6 @@
 package ru.skillfactory.vkrbot.handler;
 
 import ru.skillfactory.vkrbot.model.Role;
-import ru.skillfactory.vkrbot.model.Status;
-import ru.skillfactory.vkrbot.model.Task;
 import ru.skillfactory.vkrbot.model.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -18,15 +16,11 @@ public class NavigationHandler extends BaseHandler {
     public boolean handleNavigation(long chatId, String messageText, User user) {
         if (messageText.equals("🏠Главное меню") || messageText.equals("/start")) {
             log.info("=== BACK TO MAIN MENU ===");
-            clearAllStates(chatId);
+            // No need to clear all states anymore - they will expire via TTL in Redis
             sendMainMenu(chatId, user);
             return true;
         }
         return false;
-    }
-
-    public void clearAllStates(long chatId) {
-        botService.getUserStates().remove(chatId);
     }
 
     public void sendMainMenu(long chatId, User user) {

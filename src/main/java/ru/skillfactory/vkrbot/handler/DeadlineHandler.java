@@ -1,54 +1,78 @@
 package ru.skillfactory.vkrbot.handler;
 
 import ru.skillfactory.vkrbot.model.*;
+import ru.skillfactory.vkrbot.service.StateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.format.DateTimeParseException;
+import java.util.Arrays;
 import java.util.Optional;
 
 @Component
 @Slf4j
 public class DeadlineHandler extends BaseHandler {
 
-    private final Map<Long, DeadlineCreationState> deadlineCreationStates = new HashMap<>();
-    private final Map<Long, Deadline> selectedDeadlines = new HashMap<>();
-
+    private final StateService stateService;
     private TaskHandler taskHandler;
+
+    public DeadlineHandler(StateService stateService) {
+        this.stateService = stateService;
+    }
 
     public void setTaskHandler(TaskHandler taskHandler) {
         this.taskHandler = taskHandler;
     }
 
+    private String creationKey(long chatId) {
+        return "deadlineCreation:" + chatId;
+    }
+
+    private String selectedDeadlineIdKey(long chatId) {
+        return "selectedDeadlineId:" + chatId;
+    }
+
     public boolean isInCreationState(long chatId) {
-        return deadlineCreationStates.containsKey(chatId);
+        return stateService.hasState(creationKey(chatId));
     }
 
     public void clearSelectedDeadline(long chatId) {
-        selectedDeadlines.remove(chatId);
+        stateService.removeState(selectedDeadlineIdKey(chatId));
     }
 
     public boolean handleDeadlineAction(long chatId, String messageText, User user) {
-        if (!selectedDeadlines.containsKey(chatId)) {
+        Long deadlineId = stateService.getState(selectedDeadlineIdKey(chatId), Long.class);
+        if (deadlineId == null) return false;
+
+        Deadline deadline = botService.getDeadlineRepository()
+                .findByIdWithTasks(deadlineId).orElse(null);
+        if (deadline == null) {
+            stateService.removeState(selectedDeadlineIdKey(chatId));
             return false;
         }
+
         if (messageText.equals("➕ Добавить задачу")) {
-            Deadline currentDeadline = selectedDeadlines.get(chatId);
-            taskHandler.startCreation(chatId, currentDeadline, user);
+            taskHandler.startCreation(chatId, deadline, user);
             return true;
         }
+
+        if (deadline.getTasks().isEmpty()) {
+            sendTextMessage(chatId, "❌ В этом дедлайне пока нет задач. Добавьте задачу с помощью кнопки выше.");
+            return true;
+        }
+
         try {
             int taskNumber = Integer.parseInt(messageText) - 1;
-            Deadline deadline = selectedDeadlines.get(chatId);
             if (taskNumber >= 0 && taskNumber < deadline.getTasks().size()) {
                 Task selectedTask = deadline.getTasks().get(taskNumber);
+                // Не удаляем selectedDeadlineIdKey, чтобы можно было вернуться
                 taskHandler.showForAction(chatId, selectedTask, user);
                 return true;
             } else {
-                sendTextMessage(chatId, "❌ Неверный номер задачи.");
+                sendTextMessage(chatId, "❌ Неверный номер задачи. Введите число от 1 до " + deadline.getTasks().size());
                 return true;
             }
         } catch (NumberFormatException e) {
@@ -57,27 +81,37 @@ public class DeadlineHandler extends BaseHandler {
     }
 
     public void handleCreation(long chatId, String messageText) {
-        DeadlineCreationState state = deadlineCreationStates.get(chatId);
+        DeadlineCreationState state = stateService.getState(creationKey(chatId), DeadlineCreationState.class);
+        if (state == null) {
+            sendTextMessage(chatId, "❌ Сессия создания дедлайна истекла. Начните заново.");
+            return;
+        }
+
         if (messageText.equals("🏠Главное меню") || messageText.equals("🔙 Назад к студентам")) {
-            deadlineCreationStates.remove(chatId);
+            stateService.removeState(creationKey(chatId));
             botService.getNavigationHandler().sendMainMenu(chatId,
                     botService.getTelegramService().getUserByChatId(chatId).orElse(null));
             return;
         }
+
         switch (state.getStep()) {
             case 0:
                 state.setTitle(messageText);
                 state.setStep(1);
+                stateService.saveState(creationKey(chatId), state);
                 sendTextMessage(chatId, "Введите описание дедлайна:");
                 break;
             case 1:
                 state.setDescription(messageText);
                 state.setStep(2);
+                stateService.saveState(creationKey(chatId), state);
                 sendTextMessage(chatId, "Введите дату дедлайна (формат: ГГГГ-ММ-ДД ЧЧ:ММ):");
                 break;
             case 2:
                 try {
-                    LocalDateTime deadlineDate = LocalDateTime.parse(messageText,
+                    String trimmed = messageText.trim();
+                    String normalized = trimmed.replaceAll("\\s", " ");
+                    LocalDateTime deadlineDate = LocalDateTime.parse(normalized,
                             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
                     state.setDeadlineDate(deadlineDate);
                     Deadline deadline = new Deadline();
@@ -88,12 +122,17 @@ public class DeadlineHandler extends BaseHandler {
                     Optional<User> supervisorOpt = botService.getTelegramService().getUserByChatId(chatId);
                     supervisorOpt.ifPresent(deadline::setSupervisor);
                     Deadline savedDeadline = botService.getDeadlineRepository().save(deadline);
-                    selectedDeadlines.put(chatId, savedDeadline);
+                    // Сохраняем ID, а не объект
+                    stateService.saveState(selectedDeadlineIdKey(chatId), savedDeadline.getId());
                     sendTextMessage(chatId, "✅ Дедлайн успешно создан!");
-                    deadlineCreationStates.remove(chatId);
-                    showTasksMenu(chatId, savedDeadline, supervisorOpt.get());
+                    stateService.removeState(creationKey(chatId));
+                    showTasksMenu(chatId, savedDeadline, supervisorOpt.orElse(null));
+                } catch (DateTimeParseException e) {
+                    log.warn("Failed to parse date: '{}'", messageText);
+                    sendTextMessage(chatId, "❌ Неверный формат даты. Используйте ГГГГ-ММ-ДД ЧЧ:ММ (например, 2026-05-11 13:00)");
                 } catch (Exception e) {
-                    sendTextMessage(chatId, "❌ Неверный формат даты.");
+                    log.error("Unexpected error during deadline creation", e);
+                    sendTextMessage(chatId, "❌ Ошибка при создании дедлайна: " + e.getMessage());
                 }
                 break;
         }
@@ -103,14 +142,14 @@ public class DeadlineHandler extends BaseHandler {
         DeadlineCreationState state = new DeadlineCreationState();
         state.setStudent(student);
         state.setStep(0);
-        deadlineCreationStates.put(chatId, state);
+        stateService.saveState(creationKey(chatId), state);
         sendTextMessage(chatId, "Введите название дедлайна:");
     }
 
     public void showTasksMenu(long chatId, Deadline deadline, User supervisor) {
         Deadline loadedDeadline = botService.getDeadlineRepository()
                 .findByIdWithTasks(deadline.getId()).orElse(deadline);
-        selectedDeadlines.put(chatId, loadedDeadline);
+        stateService.saveState(selectedDeadlineIdKey(chatId), loadedDeadline.getId());
         StringBuilder message = new StringBuilder();
         message.append("📌 Дедлайн: ").append(loadedDeadline.getTitle()).append("\n");
         message.append("⏰ Дата: ").append(loadedDeadline.getDeadlineDate()
@@ -130,12 +169,14 @@ public class DeadlineHandler extends BaseHandler {
                 botService.getNavigationHandler().getSupervisorTaskKeyboard());
     }
 
-    private static class DeadlineCreationState {
+    private static class DeadlineCreationState implements Serializable {
+        private static final long serialVersionUID = 1L;
         private int step = 0;
         private String title;
         private String description;
         private LocalDateTime deadlineDate;
         private User student;
+
         public int getStep() { return step; }
         public void setStep(int step) { this.step = step; }
         public String getTitle() { return title; }

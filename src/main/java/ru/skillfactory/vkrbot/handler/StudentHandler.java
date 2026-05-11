@@ -3,13 +3,13 @@ package ru.skillfactory.vkrbot.handler;
 import ru.skillfactory.vkrbot.model.*;
 import ru.skillfactory.vkrbot.repository.DeadlineRepository;
 import ru.skillfactory.vkrbot.repository.TaskRepository;
+import ru.skillfactory.vkrbot.service.StateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -18,17 +18,28 @@ public class StudentHandler extends BaseHandler {
     private final DeadlineRepository deadlineRepository;
     private final TaskRepository taskRepository;
     private final TaskHandler taskHandler;
-
-    private final Map<Long, List<Deadline>> studentDeadlinesState = new HashMap<>();
-    private final Map<Long, List<Task>> studentTasksState = new HashMap<>();
-    private final Map<Long, Deadline> currentDeadlineCache = new HashMap<>();
+    private final StateService stateService;
 
     public StudentHandler(DeadlineRepository deadlineRepository,
                           TaskRepository taskRepository,
-                          TaskHandler taskHandler) {
+                          TaskHandler taskHandler,
+                          StateService stateService) {
         this.deadlineRepository = deadlineRepository;
         this.taskRepository = taskRepository;
         this.taskHandler = taskHandler;
+        this.stateService = stateService;
+    }
+
+    private String deadlinesIdsKey(long chatId) {
+        return "studentDeadlinesIds:" + chatId;
+    }
+
+    private String tasksIdsKey(long chatId) {
+        return "studentTasksIds:" + chatId;
+    }
+
+    private String currentDeadlineIdKey(long chatId) {
+        return "studentCurrentDeadlineId:" + chatId;
     }
 
     public void showDiplomaInfo(long chatId, User student) {
@@ -67,10 +78,12 @@ public class StudentHandler extends BaseHandler {
     }
 
     public void showStudentDeadlines(long chatId, User student) {
-        List<Deadline> deadlines = deadlineRepository.findByStudent(student);
-        studentDeadlinesState.put(chatId, deadlines);
-        studentTasksState.remove(chatId);
-        currentDeadlineCache.remove(chatId);
+        // Получаем дедлайны, отсортированные по дате (как у преподавателя)
+        List<Deadline> deadlines = deadlineRepository.findByStudentOrderByDeadlineDateAsc(student);
+        List<Long> deadlineIds = deadlines.stream().map(Deadline::getId).collect(Collectors.toList());
+        stateService.saveState(deadlinesIdsKey(chatId), deadlineIds);
+        stateService.removeState(tasksIdsKey(chatId));
+        stateService.removeState(currentDeadlineIdKey(chatId));
 
         if (deadlines.isEmpty()) {
             botService.getNavigationHandler().sendMessageWithKeyboard(chatId,
@@ -80,28 +93,44 @@ public class StudentHandler extends BaseHandler {
         }
 
         StringBuilder message = new StringBuilder();
-        message.append("📋 ДЕДЛАЙНЫ\n\n");
+        message.append("📋 ДЕДЛАЙНЫ И ЗАДАЧИ:\n\n");
+
         for (int i = 0; i < deadlines.size(); i++) {
             Deadline deadline = deadlines.get(i);
+            // Загружаем задачи для этого дедлайна
+            List<Task> tasks = taskRepository.findByDeadline(deadline);
             message.append(String.format("%d. %s\n", i + 1, deadline.getTitle()));
-            message.append(String.format("   ⏰ Дата: %s\n",
-                    deadline.getDeadlineDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))));
+            message.append(String.format("   ⏰ Дедлайн: %s\n",
+                    deadline.getDeadlineDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))));
+            message.append(String.format("   📝 Задач: %d\n", tasks.size()));
+
+            if (!tasks.isEmpty()) {
+                message.append("   Задачи:\n");
+                for (int j = 0; j < tasks.size(); j++) {
+                    Task task = tasks.get(j);
+                    String statusEmoji = getStatusEmoji(task.getStatus());
+                    message.append(String.format("      %d.%d. %s %s\n", i + 1, j + 1, statusEmoji, task.getTitle()));
+                }
+            }
             message.append("\n");
         }
-        message.append("Введите номер дедлайна для просмотра задач.");
+
+        message.append("\nВведите номер дедлайна для просмотра и управления задачами.");
         botService.getNavigationHandler().sendMessageWithKeyboard(chatId, message.toString(),
                 botService.getNavigationHandler().getStudentDeadlinesKeyboard());
     }
 
     public void showStudentTasksForDeadline(long chatId, Deadline deadline, User student) {
+        // Принудительно загружаем задачи для дедлайна
         List<Task> tasks = taskRepository.findByDeadline(deadline);
-        studentTasksState.put(chatId, tasks);
-        studentDeadlinesState.remove(chatId);
-        currentDeadlineCache.put(chatId, deadline);
+        List<Long> taskIds = tasks.stream().map(Task::getId).collect(Collectors.toList());
+        stateService.saveState(tasksIdsKey(chatId), taskIds);
+        stateService.removeState(deadlinesIdsKey(chatId));
+        stateService.saveState(currentDeadlineIdKey(chatId), deadline.getId());
 
         if (tasks.isEmpty()) {
             botService.getNavigationHandler().sendMessageWithKeyboard(chatId,
-                    String.format("📌 %s\n\nНет задач.", deadline.getTitle()),
+                    String.format("📌 %s\n\n❌ Нет задач. Руководитель ещё не добавил задачи для этого дедлайна.", deadline.getTitle()),
                     botService.getNavigationHandler().getStudentTasksKeyboard());
             return;
         }
@@ -120,38 +149,50 @@ public class StudentHandler extends BaseHandler {
     }
 
     public boolean handleStudentDeadlineSelection(long chatId, String messageText, User student) {
-        if (!studentDeadlinesState.containsKey(chatId)) {
+        if (!stateService.hasState(deadlinesIdsKey(chatId))) {
             return false;
         }
         try {
             int deadlineNumber = Integer.parseInt(messageText) - 1;
-            List<Deadline> deadlines = studentDeadlinesState.get(chatId);
-            if (deadlineNumber >= 0 && deadlineNumber < deadlines.size()) {
-                showStudentTasksForDeadline(chatId, deadlines.get(deadlineNumber), student);
+            @SuppressWarnings("unchecked")
+            List<Long> deadlineIds = (List<Long>) stateService.getState(deadlinesIdsKey(chatId), List.class);
+            if (deadlineIds != null && deadlineNumber >= 0 && deadlineNumber < deadlineIds.size()) {
+                Deadline deadline = deadlineRepository.findById(deadlineIds.get(deadlineNumber)).orElse(null);
+                if (deadline != null) {
+                    showStudentTasksForDeadline(chatId, deadline, student);
+                }
                 return true;
             }
         } catch (NumberFormatException e) {
+            // ignore
         }
         return false;
     }
 
     public boolean handleStudentTaskSelection(long chatId, String messageText, User student) {
-        if (!studentTasksState.containsKey(chatId)) {
+        if (!stateService.hasState(tasksIdsKey(chatId))) {
             return false;
         }
         try {
             int taskNumber = Integer.parseInt(messageText) - 1;
-            List<Task> tasks = studentTasksState.get(chatId);
-            if (taskNumber >= 0 && taskNumber < tasks.size()) {
-                taskHandler.showForAction(chatId, tasks.get(taskNumber), student);
+            @SuppressWarnings("unchecked")
+            List<Long> taskIds = (List<Long>) stateService.getState(tasksIdsKey(chatId), List.class);
+            if (taskIds != null && taskNumber >= 0 && taskNumber < taskIds.size()) {
+                Task task = taskRepository.findById(taskIds.get(taskNumber)).orElse(null);
+                if (task != null) {
+                    taskHandler.showForAction(chatId, task, student);
+                }
                 return true;
             }
         } catch (NumberFormatException e) {
+            // ignore
         }
         return false;
     }
 
     public Deadline getCurrentDeadline(long chatId) {
-        return currentDeadlineCache.get(chatId);
+        Long deadlineId = stateService.getState(currentDeadlineIdKey(chatId), Long.class);
+        if (deadlineId == null) return null;
+        return deadlineRepository.findById(deadlineId).orElse(null);
     }
 }

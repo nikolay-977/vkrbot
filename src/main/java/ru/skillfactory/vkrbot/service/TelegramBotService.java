@@ -207,21 +207,15 @@ public class TelegramBotService extends TelegramLongPollingBot {
             userHandler.logout(chatId, user);
             return;
         }
-        if (navigationHandler.handleNavigation(chatId, messageText, user)) {
-            return;
-        }
-        if (supervisorHandler.handleStudentSelection(chatId, messageText, user)) {
-            return;
-        }
-        if (deadlineHandler.handleDeadlineAction(chatId, messageText, user)) {
-            return;
-        }
-        if (taskHandler.handleTaskAction(chatId, messageText, user)) {
-            return;
-        }
-        if (supervisorHandler.handleStudentChoice(chatId, messageText, user)) {
-            return;
-        }
+        // 1. Сначала действия с задачами (если есть выбранная задача)
+        if (taskHandler.handleTaskAction(chatId, messageText, user)) return;
+        // 2. Затем действия с дедлайнами (выбор задачи из дедлайна)
+        if (deadlineHandler.handleDeadlineAction(chatId, messageText, user)) return;
+        // 3. Затем выбор студента из списка (ввод цифры)
+        if (supervisorHandler.handleStudentSelection(chatId, messageText, user)) return;
+        // 4. Затем навигация супервайзера (кнопки "Назад", "Добавить дедлайн", выбор дедлайна)
+        if (supervisorHandler.handleStudentChoice(chatId, messageText, user)) return;
+        if (navigationHandler.handleNavigation(chatId, messageText, user)) return;
         navigationHandler.sendMainMenu(chatId, user);
     }
 
