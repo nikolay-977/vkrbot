@@ -50,9 +50,6 @@ public class TaskHandler extends BaseHandler {
     private String taskEditKey(long chatId) { return "taskEdit:" + chatId; }
     private String reviewCommentKey(long chatId) { return "reviewComment:" + chatId; }
     private String currentDeadlineIdKey(long chatId) { return "currentDeadlineId:" + chatId; }
-    private String addCommentTaskIdKey(long chatId) { return "addCommentTaskId:" + chatId; }
-    private String fileUploadTaskIdKey(long chatId) { return "fileUploadTaskId:" + chatId; }
-    private String fileViewTaskIdKey(long chatId) { return "fileViewTaskId:" + chatId; }
     private String criteriaMenuTaskIdKey(long chatId) { return "criteriaMenuTaskId:" + chatId; }
     private String criteriaActionKey(long chatId) { return "criteriaAction:" + chatId; }
     private String pendingReviewTaskIdKey(long chatId) { return "pendingReviewTaskId:" + chatId; }
@@ -62,12 +59,6 @@ public class TaskHandler extends BaseHandler {
     // State checks
     public boolean isInTaskView(long chatId) {
         return stateService.hasState(selectedTaskIdKey(chatId));
-    }
-
-    public Task getCurrentTask(long chatId) {
-        Long taskId = stateService.getState(selectedTaskIdKey(chatId), Long.class);
-        if (taskId == null) return null;
-        return botService.getTaskRepository().findById(taskId).orElse(null);
     }
 
     public boolean isInCreationState(long chatId) {
@@ -80,18 +71,6 @@ public class TaskHandler extends BaseHandler {
 
     public boolean isInReviewCommentState(long chatId) {
         return stateService.hasState(reviewCommentKey(chatId));
-    }
-
-    public boolean isInAddCommentState(long chatId) {
-        return stateService.hasState(addCommentTaskIdKey(chatId));
-    }
-
-    public boolean isInFileUploadState(long chatId) {
-        return stateService.hasState(fileUploadTaskIdKey(chatId));
-    }
-
-    public boolean isInFileViewState(long chatId) {
-        return stateService.hasState(fileViewTaskIdKey(chatId));
     }
 
     public boolean isInCriteriaMenu(long chatId) {
@@ -455,16 +434,13 @@ public class TaskHandler extends BaseHandler {
         }
         boolean allCompleted = (totalCount == 0 || completedCount == totalCount);
 
-        // Обработка кнопки "Отметить все критерии"
         if (messageText.equals("✅ Отметить все критерии")) {
             markAllCriteriaCompleted(chatId, task, user);
             showCriteriaMenu(chatId, task, user, action);
             return;
         }
 
-        // Используем contains вместо точного сравнения
         if (messageText.contains("Завершить и принять задачу") && "accept".equals(action)) {
-            // Если не все критерии отмечены - автоматически отмечаем все
             if (!allCompleted) {
                 markAllCriteriaCompleted(chatId, task, user);
             }
@@ -486,7 +462,6 @@ public class TaskHandler extends BaseHandler {
         }
 
         if (messageText.contains("Завершить и отправить на доработку") && "rework".equals(action)) {
-            // Переходим к вводу комментария (критерии остаются как есть)
             startReviewComment(chatId, task, user);
             stateService.removeState(criteriaMenuTaskIdKey(chatId));
             stateService.removeState(criteriaActionKey(chatId));

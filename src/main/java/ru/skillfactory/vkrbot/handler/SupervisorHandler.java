@@ -136,10 +136,9 @@ public class SupervisorHandler extends BaseHandler {
                     }
                 }
             } catch (NumberFormatException e) {
-                // not a number
+
             }
 
-            // Если ничего не подошло, просто показываем меню дедлайнов заново
             Long studentId = stateService.getState(selectedStudentIdKey(chatId), Long.class);
             if (studentId != null) {
                 User selectedStudent = botService.getUserRepository().findById(studentId).orElse(null);

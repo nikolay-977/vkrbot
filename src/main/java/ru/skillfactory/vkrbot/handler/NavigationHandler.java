@@ -16,7 +16,6 @@ public class NavigationHandler extends BaseHandler {
     public boolean handleNavigation(long chatId, String messageText, User user) {
         if (messageText.equals("🏠Главное меню") || messageText.equals("/start")) {
             log.info("=== BACK TO MAIN MENU ===");
-            // No need to clear all states anymore - they will expire via TTL in Redis
             sendMainMenu(chatId, user);
             return true;
         }

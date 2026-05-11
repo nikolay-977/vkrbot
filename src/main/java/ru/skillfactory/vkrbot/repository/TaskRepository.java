@@ -9,8 +9,5 @@ import java.util.List;
 
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long> {
-    List<Task> findByStudent(User student);
-    List<Task> findBySupervisor(User supervisor);
-    List<Task> findByStudentAndSupervisor(User student, User supervisor);
     List<Task> findByDeadline(Deadline deadline);
 }

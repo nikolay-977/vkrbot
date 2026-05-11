@@ -121,7 +121,6 @@ public class StudentHandler extends BaseHandler {
     }
 
     public void showStudentTasksForDeadline(long chatId, Deadline deadline, User student) {
-        // Принудительно загружаем задачи для дедлайна
         List<Task> tasks = taskRepository.findByDeadline(deadline);
         List<Long> taskIds = tasks.stream().map(Task::getId).collect(Collectors.toList());
         stateService.saveState(tasksIdsKey(chatId), taskIds);
@@ -164,7 +163,7 @@ public class StudentHandler extends BaseHandler {
                 return true;
             }
         } catch (NumberFormatException e) {
-            // ignore
+
         }
         return false;
     }
@@ -185,7 +184,7 @@ public class StudentHandler extends BaseHandler {
                 return true;
             }
         } catch (NumberFormatException e) {
-            // ignore
+
         }
         return false;
     }

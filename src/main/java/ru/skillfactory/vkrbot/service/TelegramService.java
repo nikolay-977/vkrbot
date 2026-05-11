@@ -60,8 +60,4 @@ public class TelegramService {
     public boolean isChatConnected(Long chatId) {
         return telegramChatRepository.findByChatId(chatId).isPresent();
     }
-
-    public List<TelegramChat> getAllConnectedChats() {
-        return telegramChatRepository.findAllByUserIsNotNull();
-    }
 }
