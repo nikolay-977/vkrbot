@@ -42,7 +42,7 @@ public class EmailService {
 
             message.setText(emailText);
             log.info(emailText);
-//            mailSender.send(message);
+            mailSender.send(message);
             log.info("Email successfully sent to: {}", user.getEmail());
 
         } catch (MailException e) {
