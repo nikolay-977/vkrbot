@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5433/admin_db_dev
+    url: jdbc:postgresql://localhost:5433/admin_db_dev
     username: admin_user_dev
     password: admin_password_dev
     driver-class-name: org.postgresql.Driver
